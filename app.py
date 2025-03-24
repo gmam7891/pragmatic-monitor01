@@ -119,27 +119,32 @@ def buscar_videos_youtube():
 def salvar_no_banco(dados):
     conn = sqlite3.connect('pragmatic_lives.db')
     cursor = conn.cursor()
-    cursor.execute('''CREATE TABLE IF NOT EXISTS lives (
-        plataforma TEXT,
-        streamer TEXT,
-        title TEXT,
-        viewer_count INTEGER,
-        started_at TEXT,
-        game TEXT,
-        url TEXT,
-        thumbnail TEXT
-    )''')
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS lives (
+            plataforma TEXT,
+            streamer TEXT,
+            title TEXT,
+            viewer_count INTEGER,
+            started_at TEXT,
+            game TEXT,
+            url TEXT,
+            thumbnail TEXT
+        )
+    """)
     for d in dados:
         cursor.execute('INSERT INTO lives VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (
-            d['plataforma'], d['streamer'], d['title'], d['viewer_count'], d['started_at'],
-            d['game'], d['url'], d['thumbnail']
+            d['plataforma'], d['streamer'], d['title'], d['viewer_count'],
+            d['started_at'], d['game'], d['url'], d['thumbnail']
         ))
     conn.commit()
     conn.close()
 
 def carregar_dados():
     conn = sqlite3.connect('pragmatic_lives.db')
-    df = pd.read_sql_query("SELECT * FROM lives", conn)
+    try:
+        df = pd.read_sql_query("SELECT * FROM lives", conn)
+    except:
+        df = pd.DataFrame()
     conn.close()
     return df
 
@@ -193,7 +198,7 @@ agendador = threading.Thread(target=iniciar_agendamento, daemon=True)
 agendador.start()
 
 # ------------------------------
-# STREAMLIT - DASHBOARD
+# STREAMLIT DASHBOARD
 # ------------------------------
 st.set_page_config(page_title="Monitor Pragmatic - Twitch & YouTube", layout="wide")
 st.title("🎰 Monitor de Jogos Pragmatic Play - Twitch & YouTube (BR)")
@@ -206,26 +211,32 @@ if col1.button("🔍 Buscar agora"):
 df = carregar_dados()
 
 st.subheader("📊 Tabela de Transmissões Registradas")
-st.dataframe(df.sort_values(by="started_at", ascending=False), use_container_width=True)
+if not df.empty:
+    st.dataframe(df.sort_values(by="started_at", ascending=False), use_container_width=True)
+else:
+    st.info("Nenhum dado carregado ainda.")
 
-if st.button("📁 Exportar CSV"):
+if not df.empty and st.button("📁 Exportar CSV"):
     exportar_csv(df)
 
-st.subheader("📈 Estatísticas")
-col1, col2, col3 = st.columns(3)
-col1.metric("Streamers únicos", df["streamer"].nunique())
-col2.metric("Total de lives", len(df))
-col3.metric("Jogos monitorados", df["game"].nunique())
+if not df.empty:
+    st.subheader("📈 Estatísticas")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Streamers únicos", df["streamer"].nunique())
+    col2.metric("Total de lives", len(df))
+    col3.metric("Jogos monitorados", df["game"].nunique())
 
-st.subheader("📊 Por Plataforma")
-st.bar_chart(df['plataforma'].value_counts())
+    if "plataforma" in df.columns:
+        st.subheader("📊 Por Plataforma")
+        st.bar_chart(df['plataforma'].value_counts())
 
-st.subheader("🎮 Distribuição por Jogo")
-st.bar_chart(df['game'].value_counts())
+    if "game" in df.columns:
+        st.subheader("🎮 Distribuição por Jogo")
+        st.bar_chart(df['game'].value_counts())
 
-st.subheader("🎬 Visualização com Thumbnails")
-for i, row in df.sort_values(by="started_at", ascending=False).head(10).iterrows():
-    st.markdown(f"""
+    st.subheader("🎬 Visualização com Thumbnails")
+    for i, row in df.sort_values(by="started_at", ascending=False).head(10).iterrows():
+        st.markdown(f"""
 **{row['streamer']}** na **{row['plataforma']}** - *{row['game']}*
 
 🔗 [Assistir agora]({row['url']})  
