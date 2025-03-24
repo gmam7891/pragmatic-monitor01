@@ -26,10 +26,10 @@ PRAGMATIC_KEYWORDS = [
     'Gates of Olympus',
     'Sugar Rush',
     'Starlight Princess',
-    'Big Bass Bonanza'
-    'Pragmatic Play'
-    'Veio do Raio'
-    'Tigre sortudo'
+    'Big Bass Bonanza',
+    'Pragmatic Play',
+    'Veio do Raio',
+    'Tigre sortudo',
     'Ratinho Sortudo'
 ]
 
@@ -193,7 +193,7 @@ def rotina_agendada():
     enviar_alerta_email(todos)
 
 def iniciar_agendamento():
-    schedule.every(2).minutes.do(rotina_agendada)
+    schedule.every(60).minutes.do(rotina_agendada)
     while True:
         schedule.run_pending()
         time.sleep(1)
