@@ -27,6 +27,10 @@ PRAGMATIC_KEYWORDS = [
     'Sugar Rush',
     'Starlight Princess',
     'Big Bass Bonanza'
+    'Pragmatic Play'
+    'Veio do Raio'
+    'Tigre sortudo'
+    'Ratinho Sortudo'
 ]
 
 HEADERS_TWITCH = {
