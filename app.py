@@ -1,5 +1,3 @@
-# Pragmatic Play - Monitoramento Twitch e YouTube (BR)
-
 from datetime import datetime
 import requests
 import sqlite3
@@ -16,15 +14,9 @@ from email.mime.multipart import MIMEMultipart
 # ------------------------------
 # CONFIGURAÇÕES INICIAIS
 # ------------------------------
-# Twitch
 CLIENT_ID = 'SUA_CLIENT_ID_TWITCH'
 ACCESS_TOKEN = 'SEU_ACCESS_TOKEN_TWITCH'
-
-# YouTube
 YOUTUBE_API_KEY = 'SUA_API_KEY_YOUTUBE'
-YOUTUBE_SEARCH_URL = 'https://www.googleapis.com/youtube/v3/search'
-
-# E-mail
 EMAIL_ALERTA = 'seuemail@gmail.com'
 SENHA_EMAIL = 'sua_senha_de_aplicativo'
 EMAIL_DESTINO = 'destino@gmail.com'
@@ -42,9 +34,10 @@ HEADERS_TWITCH = {
     'Authorization': f'Bearer {ACCESS_TOKEN}'
 }
 BASE_URL_TWITCH = 'https://api.twitch.tv/helix/'
+YOUTUBE_SEARCH_URL = 'https://www.googleapis.com/youtube/v3/search'
 
 # ------------------------------
-# FUNÇÕES - TWITCH
+# TWITCH
 # ------------------------------
 def buscar_lives_twitch():
     url = BASE_URL_TWITCH + 'streams?game_id=509577&first=100&language=pt'
@@ -65,12 +58,14 @@ def filtrar_lives_twitch(lives):
                     'title': live['title'],
                     'viewer_count': live['viewer_count'],
                     'started_at': started_at.strftime('%Y-%m-%d %H:%M:%S'),
-                    'game': keyword
+                    'game': keyword,
+                    'url': f"https://twitch.tv/{live['user_name']}",
+                    'thumbnail': live['thumbnail_url'].replace('{width}', '320').replace('{height}', '180')
                 })
     return pragmatic_lives
 
 # ------------------------------
-# FUNÇÕES - YOUTUBE
+# YOUTUBE
 # ------------------------------
 def buscar_videos_youtube():
     lives = []
@@ -85,23 +80,41 @@ def buscar_videos_youtube():
             'key': YOUTUBE_API_KEY,
             'maxResults': 10
         }
-        response = requests.get(YOUTUBE_SEARCH_URL, params=params)
-        data = response.json()
-        for item in data.get('items', []):
+        search_response = requests.get(YOUTUBE_SEARCH_URL, params=params)
+        data = search_response.json()
+
+        video_ids = [item['id']['videoId'] for item in data.get('items', [])]
+        if not video_ids:
+            continue
+
+        video_details_url = 'https://www.googleapis.com/youtube/v3/videos'
+        detail_params = {
+            'part': 'snippet,liveStreamingDetails,statistics',
+            'id': ','.join(video_ids),
+            'key': YOUTUBE_API_KEY
+        }
+        detail_response = requests.get(video_details_url, params=detail_params)
+        detail_data = detail_response.json()
+
+        for item in detail_data.get('items', []):
             snippet = item['snippet']
-            live = {
+            stats = item.get('statistics', {})
+            live_details = item.get('liveStreamingDetails', {})
+
+            lives.append({
                 'plataforma': 'YouTube',
                 'streamer': snippet['channelTitle'],
                 'title': snippet['title'],
-                'viewer_count': 0,  # YouTube API não retorna isso diretamente
-                'started_at': snippet['publishedAt'].replace("T", " ").replace("Z", ""),
-                'game': keyword
-            }
-            lives.append(live)
+                'viewer_count': int(stats.get('concurrentViewers', 0)) if 'concurrentViewers' in stats else 0,
+                'started_at': live_details.get('actualStartTime', snippet['publishedAt']).replace("T", " ").replace("Z", ""),
+                'game': keyword,
+                'url': f"https://www.youtube.com/watch?v={item['id']}",
+                'thumbnail': snippet['thumbnails']['medium']['url']
+            })
     return lives
 
 # ------------------------------
-# SALVAR E CARREGAR DADOS
+# BANCO DE DADOS
 # ------------------------------
 def salvar_no_banco(dados):
     conn = sqlite3.connect('pragmatic_lives.db')
@@ -112,11 +125,14 @@ def salvar_no_banco(dados):
         title TEXT,
         viewer_count INTEGER,
         started_at TEXT,
-        game TEXT
+        game TEXT,
+        url TEXT,
+        thumbnail TEXT
     )''')
     for d in dados:
-        cursor.execute('INSERT INTO lives VALUES (?, ?, ?, ?, ?, ?)', (
-            d['plataforma'], d['streamer'], d['title'], d['viewer_count'], d['started_at'], d['game']
+        cursor.execute('INSERT INTO lives VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (
+            d['plataforma'], d['streamer'], d['title'], d['viewer_count'], d['started_at'],
+            d['game'], d['url'], d['thumbnail']
         ))
     conn.commit()
     conn.close()
@@ -132,7 +148,7 @@ def exportar_csv(df):
     st.success("Arquivo CSV exportado com sucesso!")
 
 # ------------------------------
-# ALERTA POR EMAIL
+# ALERTA POR E-MAIL
 # ------------------------------
 def enviar_alerta_email(dados):
     if not dados:
@@ -144,7 +160,7 @@ def enviar_alerta_email(dados):
 
     corpo = 'Lives encontradas:\n\n'
     for d in dados:
-        corpo += f"[{d['plataforma']}] Streamer: {d['streamer']}\nJogo: {d['game']}\nTítulo: {d['title']}\nInício: {d['started_at']}\n\n"
+        corpo += f"[{d['plataforma']}] Streamer: {d['streamer']}\nJogo: {d['game']}\nTítulo: {d['title']}\nInício: {d['started_at']}\nLink: {d['url']}\n\n"
 
     msg.attach(MIMEText(corpo, 'plain'))
     try:
@@ -157,7 +173,7 @@ def enviar_alerta_email(dados):
         print("Erro ao enviar alerta de e-mail:", e)
 
 # ------------------------------
-# ROTINA
+# ROTINA AUTOMÁTICA
 # ------------------------------
 def rotina_agendada():
     twitch = buscar_lives_twitch()
@@ -177,7 +193,7 @@ agendador = threading.Thread(target=iniciar_agendamento, daemon=True)
 agendador.start()
 
 # ------------------------------
-# DASHBOARD - STREAMLIT
+# STREAMLIT - DASHBOARD
 # ------------------------------
 st.set_page_config(page_title="Monitor Pragmatic - Twitch & YouTube", layout="wide")
 st.title("🎰 Monitor de Jogos Pragmatic Play - Twitch & YouTube (BR)")
@@ -207,8 +223,14 @@ st.bar_chart(df['plataforma'].value_counts())
 st.subheader("🎮 Distribuição por Jogo")
 st.bar_chart(df['game'].value_counts())
 
-st.subheader("🔎 Filtrar por Streamer")
-streamers = df['streamer'].unique()
-streamer_selecionado = st.selectbox("Escolha um streamer", options=streamers)
-df_filtrado = df[df['streamer'] == streamer_selecionado]
-st.write(df_filtrado.sort_values(by="started_at", ascending=False))
+st.subheader("🎬 Visualização com Thumbnails")
+for i, row in df.sort_values(by="started_at", ascending=False).head(10).iterrows():
+    st.markdown(f"""
+**{row['streamer']}** na **{row['plataforma']}** - *{row['game']}*
+
+🔗 [Assistir agora]({row['url']})  
+👥 **{row['viewer_count']}** espectadores  
+🕒 Início: {row['started_at']}  
+![]({row['thumbnail']})
+---
+""")
