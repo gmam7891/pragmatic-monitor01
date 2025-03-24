@@ -14,7 +14,7 @@ from email.mime.multipart import MIMEMultipart
 # ------------------------------
 # CONFIGURAÇÕES INICIAIS
 # ------------------------------
-CLIENT_ID = 'SUA_CLIENT_ID_TWITCH'
+CLIENT_ID = '9qkw87yuzfolbyk3lva3n76qhucrxe'
 ACCESS_TOKEN = 'SEU_ACCESS_TOKEN_TWITCH'
 YOUTUBE_API_KEY = 'AIzaSyB3r4wPR7B8y2JOl2JSpM-CbBUwvhqZm84'
 EMAIL_ALERTA = 'seuemail@gmail.com'
