@@ -1,3 +1,4 @@
+
 from datetime import datetime
 import requests
 import sqlite3
@@ -7,9 +8,6 @@ import pytz
 import schedule
 import time
 import threading
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 
 # ------------------------------
 # CONFIGURAÇÕES INICIAIS
@@ -17,9 +15,6 @@ from email.mime.multipart import MIMEMultipart
 CLIENT_ID = '9qkw87yuzfolbyk3lva3n76qhucrxe'
 ACCESS_TOKEN = '6qgrr9jy215szvksczidb8hslztux8'
 YOUTUBE_API_KEY = 'AIzaSyB3r4wPR7B8y2JOl2JSpM-CbBUwvhqZm84'
-EMAIL_ALERTA = 'seuemail@gmail.com'
-SENHA_EMAIL = 'sua_senha_de_aplicativo'
-EMAIL_DESTINO = 'destino@gmail.com'
 
 PRAGMATIC_KEYWORDS = [
     'Sweet Bonanza',
@@ -157,31 +152,6 @@ def exportar_csv(df):
     st.success("Arquivo CSV exportado com sucesso!")
 
 # ------------------------------
-# ALERTA POR E-MAIL
-# ------------------------------
-def enviar_alerta_email(dados):
-    if not dados:
-        return
-    msg = MIMEMultipart()
-    msg['From'] = EMAIL_ALERTA
-    msg['To'] = EMAIL_DESTINO
-    msg['Subject'] = '🚨 Transmissões ao vivo com jogos da Pragmatic Play!'
-
-    corpo = 'Lives encontradas:\n\n'
-    for d in dados:
-        corpo += f"[{d['plataforma']}] Streamer: {d['streamer']}\nJogo: {d['game']}\nTítulo: {d['title']}\nInício: {d['started_at']}\nLink: {d['url']}\n\n"
-
-    msg.attach(MIMEText(corpo, 'plain'))
-    try:
-        server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.starttls()
-        server.login(EMAIL_ALERTA, SENHA_EMAIL)
-        server.send_message(msg)
-        server.quit()
-    except Exception as e:
-        print("Erro ao enviar alerta de e-mail:", e)
-
-# ------------------------------
 # ROTINA AUTOMÁTICA
 # ------------------------------
 def rotina_agendada():
@@ -190,10 +160,9 @@ def rotina_agendada():
     youtube_pragmatic = buscar_videos_youtube()
     todos = twitch_pragmatic + youtube_pragmatic
     salvar_no_banco(todos)
-    enviar_alerta_email(todos)
 
 def iniciar_agendamento():
-    schedule.every(60).minutes.do(rotina_agendada)
+    schedule.every(2).minutes.do(rotina_agendada)
     while True:
         schedule.run_pending()
         time.sleep(1)
