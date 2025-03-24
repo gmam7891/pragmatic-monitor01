@@ -1,4 +1,4 @@
-# MVP de Monitoramento de Jogos da Pragmatic Play na Twitch com Dashboard Streamlit + Alertas
+# Pragmatic Play - Monitoramento Twitch e YouTube (BR)
 
 from datetime import datetime
 import requests
@@ -16,17 +16,19 @@ from email.mime.multipart import MIMEMultipart
 # ------------------------------
 # CONFIGURAÇÕES INICIAIS
 # ------------------------------
-CLIENT_ID = 'SUA_CLIENT_ID_AQUI'
-ACCESS_TOKEN = 'SEU_ACCESS_TOKEN_AQUI'
-EMAIL_ALERTA = 'seuemail@gmail.com'  # substitua por seu e-mail
-SENHA_EMAIL = 'sua_senha_de_aplicativo'  # use uma senha de app
-EMAIL_DESTINO = 'destino@gmail.com'  # e-mail que receberá os alertas
+# Twitch
+CLIENT_ID = 'SUA_CLIENT_ID_TWITCH'
+ACCESS_TOKEN = 'SEU_ACCESS_TOKEN_TWITCH'
 
-HEADERS = {
-    'Client-ID': CLIENT_ID,
-    'Authorization': f'Bearer {ACCESS_TOKEN}'
-}
-BASE_URL = 'https://api.twitch.tv/helix/'
+# YouTube
+YOUTUBE_API_KEY = 'SUA_API_KEY_YOUTUBE'
+YOUTUBE_SEARCH_URL = 'https://www.googleapis.com/youtube/v3/search'
+
+# E-mail
+EMAIL_ALERTA = 'seuemail@gmail.com'
+SENHA_EMAIL = 'sua_senha_de_aplicativo'
+EMAIL_DESTINO = 'destino@gmail.com'
+
 PRAGMATIC_KEYWORDS = [
     'Sweet Bonanza',
     'Gates of Olympus',
@@ -35,15 +37,21 @@ PRAGMATIC_KEYWORDS = [
     'Big Bass Bonanza'
 ]
 
+HEADERS_TWITCH = {
+    'Client-ID': CLIENT_ID,
+    'Authorization': f'Bearer {ACCESS_TOKEN}'
+}
+BASE_URL_TWITCH = 'https://api.twitch.tv/helix/'
+
 # ------------------------------
-# FUNÇÕES DE COLETA DE DADOS
+# FUNÇÕES - TWITCH
 # ------------------------------
-def buscar_lives_slots():
-    url = BASE_URL + 'streams?game_id=509577&first=100'  # Categoria "Slots"
-    response = requests.get(url, headers=HEADERS)
+def buscar_lives_twitch():
+    url = BASE_URL_TWITCH + 'streams?game_id=509577&first=100&language=pt'
+    response = requests.get(url, headers=HEADERS_TWITCH)
     return response.json().get('data', [])
 
-def filtrar_lives_pragmatic(lives):
+def filtrar_lives_twitch(lives):
     pragmatic_lives = []
     for live in lives:
         title = live['title'].lower()
@@ -52,6 +60,7 @@ def filtrar_lives_pragmatic(lives):
                 started_at = datetime.strptime(live['started_at'], "%Y-%m-%dT%H:%M:%SZ")
                 started_at = started_at.replace(tzinfo=pytz.utc).astimezone(pytz.timezone("America/Sao_Paulo"))
                 pragmatic_lives.append({
+                    'plataforma': 'Twitch',
                     'streamer': live['user_name'],
                     'title': live['title'],
                     'viewer_count': live['viewer_count'],
@@ -60,10 +69,45 @@ def filtrar_lives_pragmatic(lives):
                 })
     return pragmatic_lives
 
+# ------------------------------
+# FUNÇÕES - YOUTUBE
+# ------------------------------
+def buscar_videos_youtube():
+    lives = []
+    for keyword in PRAGMATIC_KEYWORDS:
+        params = {
+            'part': 'snippet',
+            'q': keyword,
+            'type': 'video',
+            'eventType': 'live',
+            'regionCode': 'BR',
+            'relevanceLanguage': 'pt',
+            'key': YOUTUBE_API_KEY,
+            'maxResults': 10
+        }
+        response = requests.get(YOUTUBE_SEARCH_URL, params=params)
+        data = response.json()
+        for item in data.get('items', []):
+            snippet = item['snippet']
+            live = {
+                'plataforma': 'YouTube',
+                'streamer': snippet['channelTitle'],
+                'title': snippet['title'],
+                'viewer_count': 0,  # YouTube API não retorna isso diretamente
+                'started_at': snippet['publishedAt'].replace("T", " ").replace("Z", ""),
+                'game': keyword
+            }
+            lives.append(live)
+    return lives
+
+# ------------------------------
+# SALVAR E CARREGAR DADOS
+# ------------------------------
 def salvar_no_banco(dados):
     conn = sqlite3.connect('pragmatic_lives.db')
     cursor = conn.cursor()
     cursor.execute('''CREATE TABLE IF NOT EXISTS lives (
+        plataforma TEXT,
         streamer TEXT,
         title TEXT,
         viewer_count INTEGER,
@@ -71,8 +115,8 @@ def salvar_no_banco(dados):
         game TEXT
     )''')
     for d in dados:
-        cursor.execute('INSERT INTO lives VALUES (?, ?, ?, ?, ?)', (
-            d['streamer'], d['title'], d['viewer_count'], d['started_at'], d['game']
+        cursor.execute('INSERT INTO lives VALUES (?, ?, ?, ?, ?, ?)', (
+            d['plataforma'], d['streamer'], d['title'], d['viewer_count'], d['started_at'], d['game']
         ))
     conn.commit()
     conn.close()
@@ -96,11 +140,11 @@ def enviar_alerta_email(dados):
     msg = MIMEMultipart()
     msg['From'] = EMAIL_ALERTA
     msg['To'] = EMAIL_DESTINO
-    msg['Subject'] = '🚨 Streamers jogando Pragmatic Play AGORA'
+    msg['Subject'] = '🚨 Transmissões ao vivo com jogos da Pragmatic Play!'
 
-    corpo = 'Novas transmissões encontradas:\n\n'
+    corpo = 'Lives encontradas:\n\n'
     for d in dados:
-        corpo += f"Streamer: {d['streamer']}\nJogo: {d['game']}\nTítulo: {d['title']}\nViewers: {d['viewer_count']}\nInício: {d['started_at']}\n\n"
+        corpo += f"[{d['plataforma']}] Streamer: {d['streamer']}\nJogo: {d['game']}\nTítulo: {d['title']}\nInício: {d['started_at']}\n\n"
 
     msg.attach(MIMEText(corpo, 'plain'))
     try:
@@ -113,13 +157,15 @@ def enviar_alerta_email(dados):
         print("Erro ao enviar alerta de e-mail:", e)
 
 # ------------------------------
-# AGENDAMENTO AUTOMÁTICO
+# ROTINA
 # ------------------------------
 def rotina_agendada():
-    lives = buscar_lives_slots()
-    pragmatic_lives = filtrar_lives_pragmatic(lives)
-    salvar_no_banco(pragmatic_lives)
-    enviar_alerta_email(pragmatic_lives)
+    twitch = buscar_lives_twitch()
+    twitch_pragmatic = filtrar_lives_twitch(twitch)
+    youtube_pragmatic = buscar_videos_youtube()
+    todos = twitch_pragmatic + youtube_pragmatic
+    salvar_no_banco(todos)
+    enviar_alerta_email(todos)
 
 def iniciar_agendamento():
     schedule.every(1).hours.do(rotina_agendada)
@@ -131,49 +177,36 @@ agendador = threading.Thread(target=iniciar_agendamento, daemon=True)
 agendador.start()
 
 # ------------------------------
-# DASHBOARD COM STREAMLIT
+# DASHBOARD - STREAMLIT
 # ------------------------------
-st.set_page_config(page_title="Pragmatic Play - Live Tracker", layout="wide")
-st.title("🎰 Monitor de Jogos da Pragmatic Play na Twitch")
+st.set_page_config(page_title="Monitor Pragmatic - Twitch & YouTube", layout="wide")
+st.title("🎰 Monitor de Jogos Pragmatic Play - Twitch & YouTube (BR)")
 
 col1, col2 = st.columns(2)
-if col1.button("🔍 Buscar novas lives agora"):
+if col1.button("🔍 Buscar agora"):
     rotina_agendada()
-    st.success(f"Nova coleta realizada com sucesso.")
+    st.success("Nova busca realizada.")
 
-# Exibe os dados salvos no banco
 df = carregar_dados()
 
 st.subheader("📊 Tabela de Transmissões Registradas")
 st.dataframe(df.sort_values(by="started_at", ascending=False), use_container_width=True)
 
-# Exportação CSV
-if st.button("📁 Exportar dados para CSV"):
+if st.button("📁 Exportar CSV"):
     exportar_csv(df)
 
-# Estatísticas
-st.subheader("📈 Estatísticas Rápidas")
+st.subheader("📈 Estatísticas")
 col1, col2, col3 = st.columns(3)
 col1.metric("Streamers únicos", df["streamer"].nunique())
 col2.metric("Total de lives", len(df))
 col3.metric("Jogos monitorados", df["game"].nunique())
 
-# Ranking de streamers
-st.subheader("🏆 Ranking de Streamers por Visualizações Totais")
-ranking_streamers = df.groupby('streamer')['viewer_count'].sum().sort_values(ascending=False).reset_index()
-st.table(ranking_streamers)
+st.subheader("📊 Por Plataforma")
+st.bar_chart(df['plataforma'].value_counts())
 
-# Gráfico por jogo
 st.subheader("🎮 Distribuição por Jogo")
-jogo_counts = df['game'].value_counts()
-st.bar_chart(jogo_counts)
+st.bar_chart(df['game'].value_counts())
 
-# Gráfico por visualizações totais por jogo
-st.subheader("👀 Visualizações Totais por Jogo")
-views_por_jogo = df.groupby('game')['viewer_count'].sum().sort_values(ascending=False)
-st.bar_chart(views_por_jogo)
-
-# Filtro por streamer
 st.subheader("🔎 Filtrar por Streamer")
 streamers = df['streamer'].unique()
 streamer_selecionado = st.selectbox("Escolha um streamer", options=streamers)
