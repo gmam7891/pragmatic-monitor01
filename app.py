@@ -193,7 +193,7 @@ def rotina_agendada():
     enviar_alerta_email(todos)
 
 def iniciar_agendamento():
-    schedule.every(5).minutes.do(rotina_agendada)
+    schedule.every(2).minutes.do(rotina_agendada)
     while True:
         schedule.run_pending()
         time.sleep(1)
