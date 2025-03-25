@@ -13,7 +13,7 @@ import os
 # CONFIGURAÇÕES INICIAIS
 # ------------------------------
 CLIENT_ID = 'gp762nuuoqcoxypju8c569th9wz7q5'
-ACCESS_TOKEN = '5gtwi4j62m9w4dmj3k1oe72947e5axpozxyhkgnvrv3vw4cf5e'
+ACCESS_TOKEN = 'rucd7fsbrt5uuajjrnjuid3kjwlcqg'
 YOUTUBE_API_KEY = 'AIzaSyB3r4wPR7B8y2JOl2JSpM-CbBUwvhqZm84'
 
 HEADERS_TWITCH = {
