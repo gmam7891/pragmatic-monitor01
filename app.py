@@ -65,7 +65,7 @@ def buscar_lives_twitch():
 def filtrar_lives_twitch(lives):
     pragmatic_lives = []
     for live in lives:
-        if live.get('game_id') != '509577':  # Virtual Casino
+        if live.get('game_id') != '509577':
             continue
         title = live['title'].lower()
         streamer_name = live['user_name'].lower()
@@ -87,212 +87,67 @@ def filtrar_lives_twitch(lives):
                 })
     return pragmatic_lives
 
-# ------------------------------
-# YOUTUBE
-# ------------------------------
-def buscar_videos_youtube():
-    lives = []
-    for keyword in PRAGMATIC_KEYWORDS:
-        params = {
-            'part': 'snippet',
-            'q': keyword,
-            'type': 'video',
-            'eventType': 'live',
-            'regionCode': 'BR',
-            'relevanceLanguage': 'pt',
-            'key': YOUTUBE_API_KEY,
-            'maxResults': 10
-        }
-        response = requests.get(YOUTUBE_SEARCH_URL, params=params)
-        data = response.json()
-        video_ids = [item['id']['videoId'] for item in data.get('items', [])]
-        if not video_ids:
+def buscar_vods_twitch():
+    vods = []
+    for streamer in STREAMERS_INTERESSE:
+        user_response = requests.get(BASE_URL_TWITCH + f'users?login={streamer}', headers=HEADERS_TWITCH)
+        user_data = user_response.json().get('data', [])
+        if not user_data:
             continue
-        detail_params = {
-            'part': 'snippet,liveStreamingDetails,statistics',
-            'id': ','.join(video_ids),
-            'key': YOUTUBE_API_KEY
-        }
-        detail_response = requests.get('https://www.googleapis.com/youtube/v3/videos', params=detail_params)
-        detail_data = detail_response.json()
-        for item in detail_data.get('items', []):
-            snippet = item['snippet']
-            stats = item.get('statistics', {})
-            live_details = item.get('liveStreamingDetails', {})
-            lives.append({
-                'plataforma': 'YouTube',
-                'streamer': snippet['channelTitle'],
-                'title': snippet['title'],
-                'viewer_count': int(stats.get('concurrentViewers', 0)) if 'concurrentViewers' in stats else 0,
-                'started_at': live_details.get('actualStartTime', snippet['publishedAt']).replace("T", " ").replace("Z", ""),
-                'game': keyword,
-                'url': f"https://www.youtube.com/watch?v={item['id']}",
-                'thumbnail': snippet['thumbnails']['medium']['url']
-            })
-    return lives
-
-def buscar_videos_youtube_vods():
-    videos = []
-    data_limite = (datetime.utcnow() - timedelta(days=30)).isoformat("T") + "Z"
-    for keyword in PRAGMATIC_KEYWORDS:
+        user_id = user_data[0]['id']
         params = {
-            'part': 'snippet',
-            'q': keyword,
-            'type': 'video',
-            'publishedAfter': data_limite,
-            'regionCode': 'BR',
-            'relevanceLanguage': 'pt',
-            'key': YOUTUBE_API_KEY,
-            'maxResults': 10
+            'user_id': user_id,
+            'first': 20,
+            'type': 'archive'
         }
-        response = requests.get(YOUTUBE_SEARCH_URL, params=params)
-        data = response.json()
-        for item in data.get('items', []):
-            snippet = item['snippet']
-            videos.append({
-                'streamer': snippet['channelTitle'],
-                'title': snippet['title'],
-                'published_at': snippet['publishedAt'].replace("T", " ").replace("Z", ""),
-                'game': keyword,
-                'url': f"https://www.youtube.com/watch?v={item['id']['videoId']}",
-                'thumbnail': snippet['thumbnails']['medium']['url']
-            })
-    return videos
+        vod_response = requests.get(BASE_URL_TWITCH + 'videos', headers=HEADERS_TWITCH, params=params)
+        vod_data = vod_response.json().get('data', [])
+        for video in vod_data:
+            created_at = datetime.strptime(video['created_at'], "%Y-%m-%dT%H:%M:%SZ")
+            if created_at < datetime.utcnow() - timedelta(days=30):
+                continue
+            for keyword in PRAGMATIC_KEYWORDS:
+                if keyword.lower() in video['title'].lower():
+                    vods.append({
+                        'plataforma': 'Twitch VOD',
+                        'streamer': video['user_name'],
+                        'title': video['title'],
+                        'viewer_count': video.get('view_count', 0),
+                        'started_at': created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                        'game': keyword,
+                        'url': video['url'],
+                        'thumbnail': video['thumbnail_url']
+                    })
+    return vods
+
+def exportar_vods_csv(vods):
+    df = pd.DataFrame(vods)
+    df.to_csv("vods_twitch.csv", index=False)
+    st.success("Arquivo CSV de VODs exportado com sucesso!")
 
 # ------------------------------
-# BANCO DE DADOS
-# ------------------------------
-def salvar_no_banco(dados):
-    conn = sqlite3.connect('pragmatic_lives.db')
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS lives (
-            plataforma TEXT,
-            streamer TEXT,
-            title TEXT,
-            viewer_count INTEGER,
-            started_at TEXT,
-            game TEXT,
-            url TEXT,
-            thumbnail TEXT
-        )
-    """)
-    for d in dados:
-        cursor.execute('INSERT INTO lives VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (
-            d['plataforma'], d['streamer'], d['title'], d['viewer_count'],
-            d['started_at'], d['game'], d['url'], d['thumbnail']
-        ))
-    conn.commit()
-    conn.close()
-
-def carregar_dados():
-    conn = sqlite3.connect('pragmatic_lives.db')
-    try:
-        df = pd.read_sql_query("SELECT * FROM lives", conn)
-    except:
-        df = pd.DataFrame()
-    conn.close()
-    return df
-
-def exportar_csv(df):
-    df.to_csv("dados_pragmatic.csv", index=False)
-    st.success("Arquivo CSV exportado com sucesso!")
-
-# ------------------------------
-# EXECUÇÃO
-# ------------------------------
-def rotina_agendada():
-    global PRAGMATIC_KEYWORDS
-    PRAGMATIC_KEYWORDS = carregar_keywords()
-    twitch = buscar_lives_twitch()
-    twitch_pragmatic = filtrar_lives_twitch(twitch)
-    youtube_pragmatic = buscar_videos_youtube()
-    todos = twitch_pragmatic + youtube_pragmatic
-    salvar_no_banco(todos)
-
-def iniciar_agendamento():
-    schedule.every(10).minutes.do(rotina_agendada)
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
-
-agendador = threading.Thread(target=iniciar_agendamento, daemon=True)
-agendador.start()
-
-# ------------------------------
-# STREAMLIT UI
+# STREAMLIT DASHBOARD
 # ------------------------------
 st.set_page_config(page_title="Monitor Pragmatic - Twitch & YouTube", layout="wide")
 st.title("🎰 Monitor de Jogos Pragmatic Play - Twitch & YouTube (BR)")
 
-st.sidebar.subheader("➕ Adicionar nova palavra-chave")
-nova_keyword = st.sidebar.text_input("Nova keyword")
-if st.sidebar.button("Adicionar keyword"):
-    adicionar_keyword(nova_keyword)
-    st.sidebar.success(f"'{nova_keyword}' adicionada. Recarregue a página para atualizar.")
-
-st.sidebar.subheader("👤 Adicionar streamer")
-novo_streamer = st.sidebar.text_input("Novo streamer")
-if st.sidebar.button("Adicionar streamer"):
-    adicionar_streamer(novo_streamer)
-    st.sidebar.success(f"Streamer '{novo_streamer}' adicionado.")
-
-col1, col2 = st.columns(2)
-if col1.button("🔍 Buscar agora"):
-    rotina_agendada()
-    st.success("Nova busca realizada.")
-
-df = carregar_dados()
-
-st.subheader("📊 Tabela de Transmissões Registradas")
-if not df.empty:
-    st.dataframe(df.sort_values(by="started_at", ascending=False), use_container_width=True)
-else:
-    st.info("Nenhum dado carregado ainda.")
-
-if not df.empty and st.button("📁 Exportar CSV"):
-    exportar_csv(df)
-
-if not df.empty:
-    st.subheader("📈 Estatísticas")
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Streamers únicos", df["streamer"].nunique())
-    col2.metric("Total de lives", len(df))
-    col3.metric("Jogos monitorados", df["game"].nunique())
-
-    if "plataforma" in df.columns:
-        st.subheader("📊 Por Plataforma")
-        st.bar_chart(df['plataforma'].value_counts())
-
-    if "game" in df.columns:
-        st.subheader("🎮 Distribuição por Jogo")
-        st.bar_chart(df['game'].value_counts())
-
-    st.subheader("🎬 Visualização com Thumbnails")
-    for i, row in df.sort_values(by="started_at", ascending=False).head(10).iterrows():
-        st.markdown(f"""
-**{row['streamer']}** na **{row['plataforma']}** - *{row['game']}*
-
-🔗 [Assistir agora]({row['url']})  
-👥 **{row['viewer_count']}** espectadores  
-🕒 Início: {row['started_at']}  
-![]({row['thumbnail']})
----
-""")
-
-st.subheader("📅 Buscar vídeos do YouTube postados nos últimos 30 dias")
-if st.button("📥 Buscar vídeos recentes"):
-    vods = buscar_videos_youtube_vods()
+if st.button("📥 Buscar VODs Twitch últimos 30 dias"):
+    vods = buscar_vods_twitch()
     if vods:
+        st.subheader("🎞️ VODs recentes da Twitch (últimos 30 dias)")
         for v in vods:
             st.markdown(f"""
 **{v['streamer']}** postou:
 
 🎮 *{v['game']}*  
-📅 Publicado: {v['published_at']}  
+👁️ {v['viewer_count']} views  
+📅 Publicado: {v['started_at']}  
 🔗 [Assistir agora]({v['url']})  
 ![]({v['thumbnail']})
 ---
 """)
+
+        if st.button("📁 Exportar VODs para CSV"):
+            exportar_vods_csv(vods)
     else:
-        st.info("Nenhum vídeo recente encontrado com as palavras-chave.")
+        st.info("Nenhum VOD recente encontrado para os streamers selecionados.")
