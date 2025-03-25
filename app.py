@@ -58,13 +58,15 @@ STREAMERS_INTERESSE = carregar_streamers()
 # TWITCH
 # ------------------------------
 def buscar_lives_twitch():
-    url = BASE_URL_TWITCH + 'streams?game_id=509577&first=100&language=pt'
+    url = BASE_URL_TWITCH + 'streams?first=100&language=pt'
     response = requests.get(url, headers=HEADERS_TWITCH)
     return response.json().get('data', [])
 
 def filtrar_lives_twitch(lives):
     pragmatic_lives = []
     for live in lives:
+        if live.get('game_name', '').lower() != 'virtual casino':
+            continue
         title = live['title'].lower()
         streamer_name = live['user_name'].lower()
         if streamer_name not in [s.lower() for s in STREAMERS_INTERESSE]:
