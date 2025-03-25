@@ -171,7 +171,6 @@ def buscar_youtube_videos_por_periodo(data_inicio, data_fim):
 # STREAMLIT DASHBOARD
 # ------------------------------
 st.set_page_config(page_title="Monitor Cassino - Twitch & YouTube", layout="wide")
-st.title("🎰 Monitor de Conteúdo de Cassino - Twitch & YouTube (BR)")
 
 st.sidebar.subheader("➕ Adicionar novo streamer")
 nome_novo_streamer = st.sidebar.text_input("Nome do streamer")
@@ -183,6 +182,8 @@ st.subheader("📅 Escolha o período para busca de VODs")
 data_inicio = st.date_input("Data de início", value=datetime.today() - timedelta(days=30))
 data_fim = st.date_input("Data de fim", value=datetime.today())
 
+streamers_selecionados = st.text_input("Filtrar por streamer (separar por vírgula)")
+
 if st.button("📥 Buscar conteúdo Cassino"):
     dt_inicio = datetime.combine(data_inicio, datetime.min.time())
     dt_fim = datetime.combine(data_fim, datetime.max.time())
@@ -192,6 +193,10 @@ if st.button("📥 Buscar conteúdo Cassino"):
     twitch_vods = buscar_vods_twitch_por_periodo(dt_inicio, dt_fim)
     youtube_videos = buscar_youtube_videos_por_periodo(dt_inicio, dt_fim)
     todos = twitch_cassino + twitch_vods + youtube_videos
+
+    if streamers_selecionados.strip():
+        filtro = [s.strip().lower() for s in streamers_selecionados.split(",") if s.strip()]
+        todos = [d for d in todos if d['streamer'].lower() in filtro]
 
     if todos:
         st.subheader(f"🎞️ Conteúdo de Cassino de {data_inicio.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')}")
