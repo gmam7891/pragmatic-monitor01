@@ -12,8 +12,8 @@ import os
 # ------------------------------
 # CONFIGURAÇÕES INICIAIS
 # ------------------------------
-CLIENT_ID = 'gp762nuuoqcoxypju8c569th9wz7q5'
-ACCESS_TOKEN = 'moila7dw5ejlk3eja6ne08arw0oexs'
+CLIENT_ID = '9qkw87yuzfolbyk3lva3n76qhucrxe'
+ACCESS_TOKEN = '6qgrr9jy215szvksczidb8hslztux8'
 YOUTUBE_API_KEY = 'AIzaSyB3r4wPR7B8y2JOl2JSpM-CbBUwvhqZm84'
 
 HEADERS_TWITCH = {
@@ -71,12 +71,14 @@ def filtrar_lives_twitch(lives):
             continue
         started_at = datetime.strptime(live['started_at'], "%Y-%m-%dT%H:%M:%SZ")
         started_at = started_at.replace(tzinfo=pytz.utc).astimezone(pytz.timezone("America/Sao_Paulo"))
+        tempo_online = datetime.now(pytz.timezone("America/Sao_Paulo")) - started_at
         pragmatic_lives.append({
             'plataforma': 'Twitch (ao vivo)',
             'streamer': live['user_name'],
             'title': live['title'],
             'viewer_count': live['viewer_count'],
             'started_at': started_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'tempo_online': str(tempo_online).split('.')[0],
             'game': game_name,
             'url': f"https://twitch.tv/{live['user_name']}",
             'thumbnail': live['thumbnail_url'].replace('{width}', '320').replace('{height}', '180')
@@ -102,12 +104,14 @@ def buscar_vods_twitch_por_periodo(data_inicio, data_fim):
             created_at = datetime.strptime(video['created_at'], "%Y-%m-%dT%H:%M:%SZ")
             if not (data_inicio <= created_at <= data_fim):
                 continue
+            duration = video.get('duration', '')
             vods.append({
                 'plataforma': 'Twitch (VOD)',
                 'streamer': video['user_name'],
                 'title': video['title'],
                 'viewer_count': video.get('view_count', 0),
                 'started_at': created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                'tempo_online': duration,
                 'game': video.get('game_name', 'Desconhecido'),
                 'url': video['url'],
                 'thumbnail': video['thumbnail_url']
@@ -144,6 +148,7 @@ def buscar_youtube_videos_por_periodo(data_inicio, data_fim):
                 'title': snippet['title'],
                 'viewer_count': 0,
                 'started_at': snippet['publishedAt'].replace("T", " ").replace("Z", ""),
+                'tempo_online': '-',
                 'game': 'Cassino (palavra-chave)',
                 'url': f"https://www.youtube.com/watch?v={item['id']['videoId']}",
                 'thumbnail': snippet['thumbnails']['medium']['url']
