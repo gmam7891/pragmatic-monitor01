@@ -156,6 +156,12 @@ def buscar_youtube_videos_por_periodo(data_inicio, data_fim):
 st.set_page_config(page_title="Monitor Cassino - Twitch & YouTube", layout="wide")
 st.title("🎰 Monitor de Conteúdo de Cassino - Twitch & YouTube (BR)")
 
+st.sidebar.subheader("➕ Adicionar novo streamer")
+nome_novo_streamer = st.sidebar.text_input("Nome do streamer")
+if st.sidebar.button("Adicionar streamer"):
+    adicionar_streamer(nome_novo_streamer)
+    st.sidebar.success(f"'{nome_novo_streamer}' adicionado. Recarregue a página para atualizar.")
+
 st.subheader("📅 Escolha o período para busca de VODs")
 data_inicio = st.date_input("Data de início", value=datetime.today() - timedelta(days=30))
 data_fim = st.date_input("Data de fim", value=datetime.today())
@@ -172,16 +178,10 @@ if st.button("📥 Buscar conteúdo Cassino"):
 
     if todos:
         st.subheader(f"🎞️ Conteúdo de Cassino de {data_inicio.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')}")
-        for v in todos:
-            st.markdown(f"""
-**{v['streamer']}** na **{v['plataforma']}**
+        df = pd.DataFrame(todos)
+        st.dataframe(df.sort_values(by="started_at", ascending=False), use_container_width=True)
 
-🎮 *{v['game']}*  
-👁️ {v['viewer_count']} views  
-📅 Publicado: {v['started_at']}  
-🔗 [Assistir agora]({v['url']})  
-![]({v['thumbnail']})
----
-""")
+        if st.download_button("📁 Exportar para CSV", data=df.to_csv(index=False).encode('utf-8'), file_name="conteudo_cassino.csv", mime="text/csv"):
+            st.success("Arquivo CSV exportado com sucesso!")
     else:
         st.info("Nenhum conteúdo encontrado para os streamers selecionados no período definido.")
