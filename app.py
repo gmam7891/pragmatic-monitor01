@@ -23,23 +23,11 @@ HEADERS_TWITCH = {
 BASE_URL_TWITCH = 'https://api.twitch.tv/helix/'
 YOUTUBE_SEARCH_URL = 'https://www.googleapis.com/youtube/v3/search'
 
-KEYWORDS_FILE = "keywords.txt"
 STREAMERS_FILE = "streamers.txt"
 
 # ------------------------------
 # UTILITÁRIOS
 # ------------------------------
-def carregar_keywords():
-    if not os.path.exists(KEYWORDS_FILE):
-        with open(KEYWORDS_FILE, "w", encoding="utf-8") as f:
-            f.write("Sweet Bonanza\nGates of Olympus\nSugar Rush\nStarlight Princess\nBig Bass Bonanza\n")
-    with open(KEYWORDS_FILE, "r", encoding="utf-8") as f:
-        return [linha.strip() for linha in f if linha.strip()]
-
-def adicionar_keyword(nova):
-    with open(KEYWORDS_FILE, "a", encoding="utf-8") as f:
-        f.write(f"{nova.strip()}\n")
-
 def carregar_streamers():
     if not os.path.exists(STREAMERS_FILE):
         with open(STREAMERS_FILE, "w", encoding="utf-8") as f:
@@ -51,7 +39,6 @@ def adicionar_streamer(novo):
     with open(STREAMERS_FILE, "a", encoding="utf-8") as f:
         f.write(f"{novo.strip()}\n")
 
-PRAGMATIC_KEYWORDS = carregar_keywords()
 STREAMERS_INTERESSE = carregar_streamers()
 
 # ------------------------------
@@ -65,26 +52,23 @@ def buscar_lives_twitch():
 def filtrar_lives_twitch(lives):
     pragmatic_lives = []
     for live in lives:
-        if live.get('game_id') != '509577':
+        if live.get('game_name', '').lower() != 'virtual casino':
             continue
-        title = live['title'].lower()
         streamer_name = live['user_name'].lower()
         if streamer_name not in [s.lower() for s in STREAMERS_INTERESSE]:
             continue
-        for keyword in PRAGMATIC_KEYWORDS:
-            if keyword.lower() in title:
-                started_at = datetime.strptime(live['started_at'], "%Y-%m-%dT%H:%M:%SZ")
-                started_at = started_at.replace(tzinfo=pytz.utc).astimezone(pytz.timezone("America/Sao_Paulo"))
-                pragmatic_lives.append({
-                    'plataforma': 'Twitch',
-                    'streamer': live['user_name'],
-                    'title': live['title'],
-                    'viewer_count': live['viewer_count'],
-                    'started_at': started_at.strftime('%Y-%m-%d %H:%M:%S'),
-                    'game': keyword,
-                    'url': f"https://twitch.tv/{live['user_name']}",
-                    'thumbnail': live['thumbnail_url'].replace('{width}', '320').replace('{height}', '180')
-                })
+        started_at = datetime.strptime(live['started_at'], "%Y-%m-%dT%H:%M:%SZ")
+        started_at = started_at.replace(tzinfo=pytz.utc).astimezone(pytz.timezone("America/Sao_Paulo"))
+        pragmatic_lives.append({
+            'plataforma': 'Twitch',
+            'streamer': live['user_name'],
+            'title': live['title'],
+            'viewer_count': live['viewer_count'],
+            'started_at': started_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'game': live['game_name'],
+            'url': f"https://twitch.tv/{live['user_name']}",
+            'thumbnail': live['thumbnail_url'].replace('{width}', '320').replace('{height}', '180')
+        })
     return pragmatic_lives
 
 def buscar_vods_twitch():
@@ -106,19 +90,50 @@ def buscar_vods_twitch():
             created_at = datetime.strptime(video['created_at'], "%Y-%m-%dT%H:%M:%SZ")
             if created_at < datetime.utcnow() - timedelta(days=30):
                 continue
-            for keyword in PRAGMATIC_KEYWORDS:
-                if keyword.lower() in video['title'].lower():
-                    vods.append({
-                        'plataforma': 'Twitch VOD',
-                        'streamer': video['user_name'],
-                        'title': video['title'],
-                        'viewer_count': video.get('view_count', 0),
-                        'started_at': created_at.strftime('%Y-%m-%d %H:%M:%S'),
-                        'game': keyword,
-                        'url': video['url'],
-                        'thumbnail': video['thumbnail_url']
-                    })
+            vods.append({
+                'plataforma': 'Twitch VOD',
+                'streamer': video['user_name'],
+                'title': video['title'],
+                'viewer_count': video.get('view_count', 0),
+                'started_at': created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                'game': video.get('game_name', 'Desconhecido'),
+                'url': video['url'],
+                'thumbnail': video['thumbnail_url']
+            })
     return vods
+
+# ------------------------------
+# YOUTUBE
+# ------------------------------
+def buscar_videos_youtube():
+    videos = []
+    data_limite = (datetime.utcnow() - timedelta(days=30)).isoformat("T") + "Z"
+    for streamer in STREAMERS_INTERESSE:
+        params = {
+            'part': 'snippet',
+            'q': streamer,
+            'type': 'video',
+            'publishedAfter': data_limite,
+            'regionCode': 'BR',
+            'relevanceLanguage': 'pt',
+            'key': YOUTUBE_API_KEY,
+            'maxResults': 10
+        }
+        response = requests.get(YOUTUBE_SEARCH_URL, params=params)
+        data = response.json()
+        for item in data.get('items', []):
+            snippet = item['snippet']
+            videos.append({
+                'plataforma': 'YouTube',
+                'streamer': snippet['channelTitle'],
+                'title': snippet['title'],
+                'viewer_count': 0,
+                'started_at': snippet['publishedAt'].replace("T", " ").replace("Z", ""),
+                'game': 'Cassino',
+                'url': f"https://www.youtube.com/watch?v={item['id']['videoId']}",
+                'thumbnail': snippet['thumbnails']['medium']['url']
+            })
+    return videos
 
 def exportar_vods_csv(vods):
     df = pd.DataFrame(vods)
@@ -128,16 +143,21 @@ def exportar_vods_csv(vods):
 # ------------------------------
 # STREAMLIT DASHBOARD
 # ------------------------------
-st.set_page_config(page_title="Monitor Pragmatic - Twitch & YouTube", layout="wide")
-st.title("🎰 Monitor de Jogos Pragmatic Play - Twitch & YouTube (BR)")
+st.set_page_config(page_title="Monitor Cassino - Twitch & YouTube", layout="wide")
+st.title("🎰 Monitor de Conteúdo de Cassino - Twitch & YouTube (BR)")
 
-if st.button("📥 Buscar VODs Twitch últimos 30 dias"):
-    vods = buscar_vods_twitch()
-    if vods:
-        st.subheader("🎞️ VODs recentes da Twitch (últimos 30 dias)")
-        for v in vods:
+if st.button("📥 Buscar conteúdo Cassino últimos 30 dias"):
+    twitch_lives = buscar_lives_twitch()
+    twitch_cassino = filtrar_lives_twitch(twitch_lives)
+    twitch_vods = buscar_vods_twitch()
+    youtube_videos = buscar_videos_youtube()
+    todos = twitch_cassino + twitch_vods + youtube_videos
+
+    if todos:
+        st.subheader("🎞️ Conteúdo de Cassino (últimos 30 dias)")
+        for v in todos:
             st.markdown(f"""
-**{v['streamer']}** postou:
+**{v['streamer']}** na **{v['plataforma']}**
 
 🎮 *{v['game']}*  
 👁️ {v['viewer_count']} views  
@@ -147,7 +167,7 @@ if st.button("📥 Buscar VODs Twitch últimos 30 dias"):
 ---
 """)
 
-        if st.button("📁 Exportar VODs para CSV"):
-            exportar_vods_csv(vods)
+        if st.button("📁 Exportar tudo para CSV"):
+            exportar_vods_csv(todos)
     else:
-        st.info("Nenhum VOD recente encontrado para os streamers selecionados.")
+        st.info("Nenhum conteúdo recente encontrado para os streamers selecionados.")
