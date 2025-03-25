@@ -71,7 +71,7 @@ def filtrar_lives_twitch(lives):
         })
     return pragmatic_lives
 
-def buscar_vods_twitch():
+def buscar_vods_twitch(periodo_dias):
     vods = []
     for streamer in STREAMERS_INTERESSE:
         user_response = requests.get(BASE_URL_TWITCH + f'users?login={streamer}', headers=HEADERS_TWITCH)
@@ -88,7 +88,7 @@ def buscar_vods_twitch():
         vod_data = vod_response.json().get('data', [])
         for video in vod_data:
             created_at = datetime.strptime(video['created_at'], "%Y-%m-%dT%H:%M:%SZ")
-            if created_at < datetime.utcnow() - timedelta(days=30):
+            if created_at < datetime.utcnow() - timedelta(days=periodo_dias):
                 continue
             vods.append({
                 'plataforma': 'Twitch VOD',
@@ -105,9 +105,9 @@ def buscar_vods_twitch():
 # ------------------------------
 # YOUTUBE
 # ------------------------------
-def buscar_videos_youtube():
+def buscar_videos_youtube(periodo_dias):
     videos = []
-    data_limite = (datetime.utcnow() - timedelta(days=30)).isoformat("T") + "Z"
+    data_limite = (datetime.utcnow() - timedelta(days=periodo_dias)).isoformat("T") + "Z"
     for streamer in STREAMERS_INTERESSE:
         params = {
             'part': 'snippet',
@@ -146,15 +146,17 @@ def exportar_vods_csv(vods):
 st.set_page_config(page_title="Monitor Cassino - Twitch & YouTube", layout="wide")
 st.title("🎰 Monitor de Conteúdo de Cassino - Twitch & YouTube (BR)")
 
-if st.button("📥 Buscar conteúdo Cassino últimos 30 dias"):
+periodo_dias = st.number_input("📅 Período de busca (em dias)", min_value=1, max_value=90, value=30)
+
+if st.button("📥 Buscar conteúdo Cassino"):
     twitch_lives = buscar_lives_twitch()
     twitch_cassino = filtrar_lives_twitch(twitch_lives)
-    twitch_vods = buscar_vods_twitch()
-    youtube_videos = buscar_videos_youtube()
+    twitch_vods = buscar_vods_twitch(periodo_dias)
+    youtube_videos = buscar_videos_youtube(periodo_dias)
     todos = twitch_cassino + twitch_vods + youtube_videos
 
     if todos:
-        st.subheader("🎞️ Conteúdo de Cassino (últimos 30 dias)")
+        st.subheader(f"🎞️ Conteúdo de Cassino (últimos {periodo_dias} dias)")
         for v in todos:
             st.markdown(f"""
 **{v['streamer']}** na **{v['plataforma']}**
