@@ -170,7 +170,7 @@ def buscar_youtube_videos_por_periodo(data_inicio, data_fim):
 # ------------------------------
 # STREAMLIT DASHBOARD
 # ------------------------------
-st.set_page_config(page_title="Monitor Cassino - Twitch & YouTube", layout="wide")
+st.set_page_config(page_title="Monitor Cassino PP - Twitch & YouTube", layout="wide")
 
 st.sidebar.subheader("➕ Adicionar novo streamer")
 nome_novo_streamer = st.sidebar.text_input("Nome do streamer")
