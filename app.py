@@ -1,12 +1,8 @@
 from datetime import datetime, timedelta
 import requests
-import sqlite3
 import streamlit as st
 import pandas as pd
 import pytz
-import schedule
-import time
-import threading
 import os
 
 # ------------------------------
@@ -14,18 +10,17 @@ import os
 # ------------------------------
 CLIENT_ID = 'gp762nuuoqcoxypju8c569th9wz7q5'
 ACCESS_TOKEN = 'moila7dw5ejlk3eja6ne08arw0oexs'
-YOUTUBE_API_KEY = 'AIzaSyB3r4wPR7B8y2JOl2JSpM-CbBUwvhqZm84'
-
 HEADERS_TWITCH = {
     'Client-ID': CLIENT_ID,
     'Authorization': f'Bearer {ACCESS_TOKEN}'
 }
 BASE_URL_TWITCH = 'https://api.twitch.tv/helix/'
+YOUTUBE_API_KEY = 'AIzaSyB3r4wPR7B8y2JOl2JSpM-CbBUwvhqZm84'
 YOUTUBE_SEARCH_URL = 'https://www.googleapis.com/youtube/v3/search'
 YOUTUBE_VIDEO_URL = 'https://www.googleapis.com/youtube/v3/videos'
 
 STREAMERS_FILE = "streamers.txt"
-GAME_NAME_TARGET = 'Virtual Casino'
+JOGOS_FILE = "jogos_pragmatic.txt"
 
 # ------------------------------
 # UTILITÁRIOS
@@ -42,6 +37,15 @@ def adicionar_streamer(novo):
         f.write(f"{novo.strip()}\n")
 
 STREAMERS_INTERESSE = carregar_streamers()
+
+def carregar_jogos_pragmatic():
+    if not os.path.exists(JOGOS_FILE):
+        with open(JOGOS_FILE, "w", encoding="utf-8") as f:
+            f.write("Sweet Bonanza\nGates of Olympus\nSugar Rush\n")
+    with open(JOGOS_FILE, "r", encoding="utf-8") as f:
+        return [linha.strip().lower() for linha in f if linha.strip()]
+
+JOGOS_PRAGMATIC = carregar_jogos_pragmatic()
 
 # ------------------------------
 # TWITCH
@@ -65,7 +69,8 @@ def filtrar_lives_twitch(lives):
         if not game_id:
             continue
         game_name = buscar_game_name(game_id)
-        if game_name and game_name.lower() != GAME_NAME_TARGET.lower():
+        title_lower = live['title'].lower()
+        if not any(jogo in title_lower or jogo in (game_name or '').lower() for jogo in JOGOS_PRAGMATIC):
             continue
         streamer_name = live['user_name'].lower()
         if streamer_name not in [s.lower() for s in STREAMERS_INTERESSE]:
@@ -84,38 +89,6 @@ def filtrar_lives_twitch(lives):
             'url': f"https://twitch.tv/{live['user_name']}"
         })
     return pragmatic_lives
-
-def buscar_vods_twitch_por_periodo(data_inicio, data_fim):
-    vods = []
-    for streamer in STREAMERS_INTERESSE:
-        user_response = requests.get(BASE_URL_TWITCH + f'users?login={streamer}', headers=HEADERS_TWITCH)
-        user_data = user_response.json().get('data', [])
-        if not user_data:
-            continue
-        user_id = user_data[0]['id']
-        params = {
-            'user_id': user_id,
-            'first': 100,
-            'type': 'archive'
-        }
-        vod_response = requests.get(BASE_URL_TWITCH + 'videos', headers=HEADERS_TWITCH, params=params)
-        vod_data = vod_response.json().get('data', [])
-        for video in vod_data:
-            created_at = datetime.strptime(video['created_at'], "%Y-%m-%dT%H:%M:%SZ")
-            if not (data_inicio <= created_at <= data_fim):
-                continue
-            duration = video.get('duration', '')
-            vods.append({
-                'plataforma': 'Twitch (VOD)',
-                'streamer': video['user_name'],
-                'title': video['title'],
-                'viewer_count': video.get('view_count', 0),
-                'started_at': created_at.strftime('%Y-%m-%d %H:%M:%S'),
-                'tempo_online': duration,
-                'game': video.get('game_name', 'Desconhecido'),
-                'url': video['url']
-            })
-    return vods
 
 # ------------------------------
 # YOUTUBE
@@ -168,7 +141,7 @@ def buscar_youtube_videos_por_periodo(data_inicio, data_fim):
     return videos
 
 # ------------------------------
-# STREAMLIT DASHBOARD
+# STREAMLIT - INTERFACE COMPLETA
 # ------------------------------
 st.set_page_config(page_title="Monitor Cassino PP - Twitch & YouTube", layout="wide")
 
@@ -178,32 +151,37 @@ if st.sidebar.button("Adicionar streamer"):
     adicionar_streamer(nome_novo_streamer)
     st.sidebar.success(f"'{nome_novo_streamer}' adicionado. Recarregue a página para atualizar.")
 
-st.subheader("📅 Escolha o período para busca de VODs")
+st.sidebar.subheader("🎰 Jogos da Pragmatic Play")
+jogos_atuais = carregar_jogos_pragmatic()
+st.sidebar.write("Jogos monitorados:")
+st.sidebar.write("\n".join(jogos_atuais))
+novo_jogo = st.sidebar.text_input("Adicionar novo jogo")
+if st.sidebar.button("Adicionar jogo"):
+    if novo_jogo.strip():
+        with open(JOGOS_FILE, "a", encoding="utf-8") as f:
+            f.write(f"{novo_jogo.strip()}\n")
+        st.sidebar.success(f"'{novo_jogo}' adicionado. Recarregue a página para atualizar.")
+
+st.subheader("📅 Escolha o período para buscar vídeos do YouTube")
 data_inicio = st.date_input("Data de início", value=datetime.today() - timedelta(days=30))
 data_fim = st.date_input("Data de fim", value=datetime.today())
 
-streamers_selecionados = st.text_input("Filtrar por streamer (separar por vírgula)")
-
-if st.button("📥 Buscar conteúdo Cassino"):
-    dt_inicio = datetime.combine(data_inicio, datetime.min.time())
-    dt_fim = datetime.combine(data_fim, datetime.max.time())
-
+if st.button("🔍 Buscar agora"):
     twitch_lives = buscar_lives_twitch()
-    twitch_cassino = filtrar_lives_twitch(twitch_lives)
-    twitch_vods = buscar_vods_twitch_por_periodo(dt_inicio, dt_fim)
-    youtube_videos = buscar_youtube_videos_por_periodo(dt_inicio, dt_fim)
-    todos = twitch_cassino + twitch_vods + youtube_videos
+    pragmatic_lives = filtrar_lives_twitch(twitch_lives)
+    youtube_videos = buscar_youtube_videos_por_periodo(
+        datetime.combine(data_inicio, datetime.min.time()),
+        datetime.combine(data_fim, datetime.max.time())
+    )
 
-    if streamers_selecionados.strip():
-        filtro = [s.strip().lower() for s in streamers_selecionados.split(",") if s.strip()]
-        todos = [d for d in todos if d['streamer'].lower() in filtro]
+    todos = pragmatic_lives + youtube_videos
 
     if todos:
-        st.subheader(f"🎞️ Conteúdo de Cassino de {data_inicio.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')}")
         df = pd.DataFrame(todos)
         st.dataframe(df.sort_values(by="started_at", ascending=False), use_container_width=True)
 
-        if st.download_button("📁 Exportar para CSV", data=df.to_csv(index=False).encode('utf-8'), file_name="conteudo_cassino.csv", mime="text/csv"):
-            st.success("Arquivo CSV exportado com sucesso!")
+        if st.download_button("📁 Exportar para CSV", data=df.to_csv(index=False).encode('utf-8'),
+                              file_name="lives_pragmatic.csv", mime="text/csv"):
+            st.success("Arquivo exportado com sucesso!")
     else:
-        st.info("Nenhum conteúdo encontrado para os streamers selecionados no período definido.")
+        st.info("Nenhum vídeo ou live encontrada com jogos da Pragmatic Play.")
