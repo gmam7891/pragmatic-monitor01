@@ -1,4 +1,3 @@
-adicione nesse código 
 from datetime import datetime, timedelta
 import requests
 import sqlite3
