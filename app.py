@@ -24,6 +24,7 @@ BASE_URL_TWITCH = 'https://api.twitch.tv/helix/'
 YOUTUBE_SEARCH_URL = 'https://www.googleapis.com/youtube/v3/search'
 
 STREAMERS_FILE = "streamers.txt"
+GAME_NAME_TARGET = 'Virtual Casino'
 
 # ------------------------------
 # UTILITÁRIOS
@@ -49,10 +50,21 @@ def buscar_lives_twitch():
     response = requests.get(url, headers=HEADERS_TWITCH)
     return response.json().get('data', [])
 
+def buscar_game_name(game_id):
+    response = requests.get(BASE_URL_TWITCH + f'games?id={game_id}', headers=HEADERS_TWITCH)
+    data = response.json().get('data', [])
+    if data:
+        return data[0]['name']
+    return None
+
 def filtrar_lives_twitch(lives):
     pragmatic_lives = []
     for live in lives:
-        if live.get('game_name', '').lower() != 'virtual casino':
+        game_id = live.get('game_id')
+        if not game_id:
+            continue
+        game_name = buscar_game_name(game_id)
+        if game_name and game_name.lower() != GAME_NAME_TARGET.lower():
             continue
         streamer_name = live['user_name'].lower()
         if streamer_name not in [s.lower() for s in STREAMERS_INTERESSE]:
@@ -65,7 +77,7 @@ def filtrar_lives_twitch(lives):
             'title': live['title'],
             'viewer_count': live['viewer_count'],
             'started_at': started_at.strftime('%Y-%m-%d %H:%M:%S'),
-            'game': live['game_name'],
+            'game': game_name,
             'url': f"https://twitch.tv/{live['user_name']}",
             'thumbnail': live['thumbnail_url'].replace('{width}', '320').replace('{height}', '180')
         })
@@ -81,7 +93,7 @@ def buscar_vods_twitch(periodo_dias):
         user_id = user_data[0]['id']
         params = {
             'user_id': user_id,
-            'first': 20,
+            'first': 100,
             'type': 'archive'
         }
         vod_response = requests.get(BASE_URL_TWITCH + 'videos', headers=HEADERS_TWITCH, params=params)
@@ -111,7 +123,7 @@ def buscar_videos_youtube(periodo_dias):
     for streamer in STREAMERS_INTERESSE:
         params = {
             'part': 'snippet',
-            'q': streamer,
+            'q': streamer + " cassino",
             'type': 'video',
             'publishedAfter': data_limite,
             'regionCode': 'BR',
