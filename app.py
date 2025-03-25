@@ -8,10 +8,6 @@ import schedule
 import time
 import threading
 import os
-import cv2
-import numpy as np
-from PIL import Image
-from io import BytesIO
 
 # ------------------------------
 # CONFIGURAÇÕES INICIAIS
@@ -29,7 +25,6 @@ YOUTUBE_SEARCH_URL = 'https://www.googleapis.com/youtube/v3/search'
 
 KEYWORDS_FILE = "keywords.txt"
 STREAMERS_FILE = "streamers.txt"
-TARGET_IMAGE_PATH = "target_icon.png"  # ícone para detecção
 
 # ------------------------------
 # UTILITÁRIOS
@@ -60,24 +55,6 @@ PRAGMATIC_KEYWORDS = carregar_keywords()
 STREAMERS_INTERESSE = carregar_streamers()
 
 # ------------------------------
-# DETECÇÃO DE IMAGEM
-# ------------------------------
-def verificar_imagem_na_thumbnail(thumbnail_url):
-    try:
-        response = requests.get(thumbnail_url)
-        if response.status_code != 200:
-            return False
-        img_np = np.array(Image.open(BytesIO(response.content)).convert("RGB"))
-        target_img = cv2.imread(TARGET_IMAGE_PATH)
-        img_rgb = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
-        res = cv2.matchTemplate(img_rgb, target_img, cv2.TM_CCOEFF_NORMED)
-        threshold = 0.8
-        loc = np.where(res >= threshold)
-        return len(loc[0]) > 0
-    except Exception:
-        return False
-
-# ------------------------------
 # TWITCH
 # ------------------------------
 def buscar_lives_twitch():
@@ -91,8 +68,6 @@ def filtrar_lives_twitch(lives):
         title = live['title'].lower()
         streamer_name = live['user_name'].lower()
         if streamer_name not in [s.lower() for s in STREAMERS_INTERESSE]:
-            continue
-        if not verificar_imagem_na_thumbnail(live['thumbnail_url'].replace('{width}', '320').replace('{height}', '180')):
             continue
         for keyword in PRAGMATIC_KEYWORDS:
             if keyword.lower() in title:
