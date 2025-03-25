@@ -87,6 +87,42 @@ def filtrar_lives_twitch(lives):
                 })
     return pragmatic_lives
 
+def buscar_vods_twitch():
+    vods = []
+    base_url = BASE_URL_TWITCH + 'videos'
+    data_limite = datetime.utcnow() - timedelta(days=30)
+    for streamer in STREAMERS_INTERESSE:
+        user_data = requests.get(BASE_URL_TWITCH + f'users?login={streamer}', headers=HEADERS_TWITCH).json()
+        if not user_data.get('data'):
+            continue
+        user_id = user_data['data'][0]['id']
+        params = {
+            'user_id': user_id,
+            'first': 50,
+            'type': 'archive'
+        }
+        response = requests.get(base_url, headers=HEADERS_TWITCH, params=params)
+        if response.status_code != 200:
+            continue
+        data = response.json().get('data', [])
+        for video in data:
+            created_at = datetime.strptime(video['created_at'], "%Y-%m-%dT%H:%M:%SZ")
+            if created_at < data_limite:
+                continue
+            for keyword in PRAGMATIC_KEYWORDS:
+                if keyword.lower() in video['title'].lower():
+                    vods.append({
+                        'plataforma': 'Twitch VOD',
+                        'streamer': streamer,
+                        'title': video['title'],
+                        'viewer_count': video.get('view_count', 0),
+                        'started_at': created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                        'game': keyword,
+                        'url': video['url'],
+                        'thumbnail': video['thumbnail_url']
+                    })
+    return vods
+
 # ------------------------------
 # YOUTUBE VODs (Últimos 30 dias)
 # ------------------------------
@@ -161,7 +197,8 @@ def rotina_agendada():
     PRAGMATIC_KEYWORDS = carregar_keywords()
     twitch = buscar_lives_twitch()
     twitch_pragmatic = filtrar_lives_twitch(twitch)
-    salvar_no_banco(twitch_pragmatic)
+    vods_twitch = buscar_vods_twitch()
+    salvar_no_banco(twitch_pragmatic + vods_twitch)
 
 def iniciar_agendamento():
     schedule.every(10).minutes.do(rotina_agendada)
