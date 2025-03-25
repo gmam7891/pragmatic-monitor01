@@ -22,6 +22,7 @@ HEADERS_TWITCH = {
 }
 BASE_URL_TWITCH = 'https://api.twitch.tv/helix/'
 YOUTUBE_SEARCH_URL = 'https://www.googleapis.com/youtube/v3/search'
+YOUTUBE_VIDEO_URL = 'https://www.googleapis.com/youtube/v3/videos'
 
 STREAMERS_FILE = "streamers.txt"
 GAME_NAME_TARGET = 'Virtual Casino'
@@ -80,8 +81,7 @@ def filtrar_lives_twitch(lives):
             'started_at': started_at.strftime('%Y-%m-%d %H:%M:%S'),
             'tempo_online': str(tempo_online).split('.')[0],
             'game': game_name,
-            'url': f"https://twitch.tv/{live['user_name']}",
-            'thumbnail': live['thumbnail_url'].replace('{width}', '320').replace('{height}', '180')
+            'url': f"https://twitch.tv/{live['user_name']}"
         })
     return pragmatic_lives
 
@@ -113,8 +113,7 @@ def buscar_vods_twitch_por_periodo(data_inicio, data_fim):
                 'started_at': created_at.strftime('%Y-%m-%d %H:%M:%S'),
                 'tempo_online': duration,
                 'game': video.get('game_name', 'Desconhecido'),
-                'url': video['url'],
-                'thumbnail': video['thumbnail_url']
+                'url': video['url']
             })
     return vods
 
@@ -126,7 +125,7 @@ def buscar_youtube_videos_por_periodo(data_inicio, data_fim):
     published_after = data_inicio.isoformat("T") + "Z"
     published_before = data_fim.isoformat("T") + "Z"
     for streamer in STREAMERS_INTERESSE:
-        params = {
+        search_params = {
             'part': 'snippet',
             'channelType': 'any',
             'q': streamer,
@@ -138,20 +137,33 @@ def buscar_youtube_videos_por_periodo(data_inicio, data_fim):
             'key': YOUTUBE_API_KEY,
             'maxResults': 10
         }
-        response = requests.get(YOUTUBE_SEARCH_URL, params=params)
-        data = response.json()
-        for item in data.get('items', []):
+        search_response = requests.get(YOUTUBE_SEARCH_URL, params=search_params)
+        search_data = search_response.json()
+        video_ids = [item['id']['videoId'] for item in search_data.get('items', [])]
+
+        if not video_ids:
+            continue
+
+        stats_params = {
+            'part': 'snippet,statistics',
+            'id': ','.join(video_ids),
+            'key': YOUTUBE_API_KEY
+        }
+        stats_response = requests.get(YOUTUBE_VIDEO_URL, params=stats_params)
+        stats_data = stats_response.json()
+
+        for item in stats_data.get('items', []):
             snippet = item['snippet']
+            stats = item['statistics']
             videos.append({
                 'plataforma': 'YouTube',
                 'streamer': snippet['channelTitle'],
                 'title': snippet['title'],
-                'viewer_count': 0,
+                'viewer_count': stats.get('viewCount', 0),
                 'started_at': snippet['publishedAt'].replace("T", " ").replace("Z", ""),
                 'tempo_online': '-',
                 'game': 'Cassino (palavra-chave)',
-                'url': f"https://www.youtube.com/watch?v={item['id']['videoId']}",
-                'thumbnail': snippet['thumbnails']['medium']['url']
+                'url': f"https://www.youtube.com/watch?v={item['id']}"
             })
     return videos
 
