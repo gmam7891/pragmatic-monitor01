@@ -83,7 +83,7 @@ def filtrar_lives_twitch(lives):
         })
     return pragmatic_lives
 
-def buscar_vods_twitch(periodo_dias):
+def buscar_vods_twitch_por_periodo(data_inicio, data_fim):
     vods = []
     for streamer in STREAMERS_INTERESSE:
         user_response = requests.get(BASE_URL_TWITCH + f'users?login={streamer}', headers=HEADERS_TWITCH)
@@ -100,7 +100,7 @@ def buscar_vods_twitch(periodo_dias):
         vod_data = vod_response.json().get('data', [])
         for video in vod_data:
             created_at = datetime.strptime(video['created_at'], "%Y-%m-%dT%H:%M:%SZ")
-            if created_at < datetime.utcnow() - timedelta(days=periodo_dias):
+            if not (data_inicio <= created_at <= data_fim):
                 continue
             vods.append({
                 'plataforma': 'Twitch VOD',
@@ -115,60 +115,27 @@ def buscar_vods_twitch(periodo_dias):
     return vods
 
 # ------------------------------
-# YOUTUBE
-# ------------------------------
-def buscar_videos_youtube(periodo_dias):
-    videos = []
-    data_limite = (datetime.utcnow() - timedelta(days=periodo_dias)).isoformat("T") + "Z"
-    for streamer in STREAMERS_INTERESSE:
-        params = {
-            'part': 'snippet',
-            'q': streamer + " cassino",
-            'type': 'video',
-            'publishedAfter': data_limite,
-            'regionCode': 'BR',
-            'relevanceLanguage': 'pt',
-            'key': YOUTUBE_API_KEY,
-            'maxResults': 10
-        }
-        response = requests.get(YOUTUBE_SEARCH_URL, params=params)
-        data = response.json()
-        for item in data.get('items', []):
-            snippet = item['snippet']
-            videos.append({
-                'plataforma': 'YouTube',
-                'streamer': snippet['channelTitle'],
-                'title': snippet['title'],
-                'viewer_count': 0,
-                'started_at': snippet['publishedAt'].replace("T", " ").replace("Z", ""),
-                'game': 'Cassino',
-                'url': f"https://www.youtube.com/watch?v={item['id']['videoId']}",
-                'thumbnail': snippet['thumbnails']['medium']['url']
-            })
-    return videos
-
-def exportar_vods_csv(vods):
-    df = pd.DataFrame(vods)
-    df.to_csv("vods_twitch.csv", index=False)
-    st.success("Arquivo CSV de VODs exportado com sucesso!")
-
-# ------------------------------
 # STREAMLIT DASHBOARD
 # ------------------------------
 st.set_page_config(page_title="Monitor Cassino - Twitch & YouTube", layout="wide")
 st.title("🎰 Monitor de Conteúdo de Cassino - Twitch & YouTube (BR)")
 
-periodo_dias = st.number_input("📅 Período de busca (em dias)", min_value=1, max_value=90, value=30)
+st.subheader("📅 Escolha o período para busca de VODs")
+data_inicio = st.date_input("Data de início", value=datetime.today() - timedelta(days=30))
+data_fim = st.date_input("Data de fim", value=datetime.today())
 
 if st.button("📥 Buscar conteúdo Cassino"):
     twitch_lives = buscar_lives_twitch()
     twitch_cassino = filtrar_lives_twitch(twitch_lives)
-    twitch_vods = buscar_vods_twitch(periodo_dias)
-    youtube_videos = buscar_videos_youtube(periodo_dias)
-    todos = twitch_cassino + twitch_vods + youtube_videos
+
+    dt_inicio = datetime.combine(data_inicio, datetime.min.time())
+    dt_fim = datetime.combine(data_fim, datetime.max.time())
+
+    twitch_vods = buscar_vods_twitch_por_periodo(dt_inicio, dt_fim)
+    todos = twitch_cassino + twitch_vods
 
     if todos:
-        st.subheader(f"🎞️ Conteúdo de Cassino (últimos {periodo_dias} dias)")
+        st.subheader(f"🎞️ Conteúdo de Cassino de {data_inicio.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')}")
         for v in todos:
             st.markdown(f"""
 **{v['streamer']}** na **{v['plataforma']}**
@@ -180,8 +147,5 @@ if st.button("📥 Buscar conteúdo Cassino"):
 ![]({v['thumbnail']})
 ---
 """)
-
-        if st.button("📁 Exportar tudo para CSV"):
-            exportar_vods_csv(todos)
     else:
-        st.info("Nenhum conteúdo recente encontrado para os streamers selecionados.")
+        st.info("Nenhum conteúdo encontrado para os streamers selecionados no período definido.")
