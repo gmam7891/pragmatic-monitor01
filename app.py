@@ -28,6 +28,24 @@ STREAMERS_FILE = "streamers.txt"
 GAME_NAME_TARGET = 'Virtual Casino'
 
 # ------------------------------
+# ESTILO PERSONALIZADO
+# ------------------------------
+st.markdown("""
+    <style>
+        body, .stApp { background-color: black; color: white; }
+        .css-1lcbmhc, .css-1v0mbdj, .css-1avcm0n { background-color: white !important; color: black !important; }
+        .css-ffhzg2, .css-1x8cf1d, .css-1c7y2kd { background-color: white !important; color: black !important; }
+        .block-container { padding-top: 2rem; }
+    </style>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+    <div style="position: absolute; top: 10px; left: 10px;">
+        <img src="https://www.pragmaticplay.com/wp-content/themes/gp-theme-basic/libs/dist/images/PP-white-logo.svg" width="159" height="73">
+    </div>
+""", unsafe_allow_html=True)
+
+# ------------------------------
 # UTILITÁRIOS
 # ------------------------------
 def carregar_streamers():
@@ -171,7 +189,6 @@ def buscar_youtube_videos_por_periodo(data_inicio, data_fim):
 # STREAMLIT DASHBOARD
 # ------------------------------
 st.set_page_config(page_title="Monitor Cassino - Twitch & YouTube", layout="wide")
-st.title("🎰 Monitor de Conteúdo de Cassino - Twitch & YouTube (BR)")
 
 st.sidebar.subheader("➕ Adicionar novo streamer")
 nome_novo_streamer = st.sidebar.text_input("Nome do streamer")
