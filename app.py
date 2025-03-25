@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import requests
 import sqlite3
 import streamlit as st
@@ -23,9 +23,6 @@ HEADERS_TWITCH = {
 BASE_URL_TWITCH = 'https://api.twitch.tv/helix/'
 YOUTUBE_SEARCH_URL = 'https://www.googleapis.com/youtube/v3/search'
 
-# ------------------------------
-# KEYWORDS DINÂMICAS
-# ------------------------------
 KEYWORDS_FILE = "keywords.txt"
 
 def carregar_keywords():
@@ -41,9 +38,6 @@ def adicionar_keyword(nova):
 
 PRAGMATIC_KEYWORDS = carregar_keywords()
 
-# ------------------------------
-# TWITCH
-# ------------------------------
 def buscar_lives_twitch():
     url = BASE_URL_TWITCH + 'streams?game_id=509577&first=100&language=pt'
     response = requests.get(url, headers=HEADERS_TWITCH)
@@ -69,9 +63,6 @@ def filtrar_lives_twitch(lives):
                 })
     return pragmatic_lives
 
-# ------------------------------
-# YOUTUBE
-# ------------------------------
 def buscar_videos_youtube():
     lives = []
     for keyword in PRAGMATIC_KEYWORDS:
@@ -85,10 +76,8 @@ def buscar_videos_youtube():
             'key': YOUTUBE_API_KEY,
             'maxResults': 10
         }
-        search_response = requests.get(YOUTUBE_SEARCH_URL, params=params)
-        data = search_response.json()
-        print(f"[YouTube] Resposta para '{keyword}':", data)
-
+        response = requests.get(YOUTUBE_SEARCH_URL, params=params)
+        data = response.json()
         video_ids = [item['id']['videoId'] for item in data.get('items', [])]
         if not video_ids:
             continue
@@ -105,7 +94,6 @@ def buscar_videos_youtube():
             snippet = item['snippet']
             stats = item.get('statistics', {})
             live_details = item.get('liveStreamingDetails', {})
-
             lives.append({
                 'plataforma': 'YouTube',
                 'streamer': snippet['channelTitle'],
@@ -118,9 +106,34 @@ def buscar_videos_youtube():
             })
     return lives
 
-# ------------------------------
-# BANCO DE DADOS
-# ------------------------------
+def buscar_videos_youtube_vods():
+    videos = []
+    data_limite = (datetime.utcnow() - timedelta(days=30)).isoformat("T") + "Z"
+    for keyword in PRAGMATIC_KEYWORDS:
+        params = {
+            'part': 'snippet',
+            'q': keyword,
+            'type': 'video',
+            'publishedAfter': data_limite,
+            'regionCode': 'BR',
+            'relevanceLanguage': 'pt',
+            'key': YOUTUBE_API_KEY,
+            'maxResults': 10
+        }
+        response = requests.get(YOUTUBE_SEARCH_URL, params=params)
+        data = response.json()
+        for item in data.get('items', []):
+            snippet = item['snippet']
+            videos.append({
+                'streamer': snippet['channelTitle'],
+                'title': snippet['title'],
+                'published_at': snippet['publishedAt'].replace("T", " ").replace("Z", ""),
+                'game': keyword,
+                'url': f"https://www.youtube.com/watch?v={item['id']['videoId']}",
+                'thumbnail': snippet['thumbnails']['medium']['url']
+            })
+    return videos
+
 def salvar_no_banco(dados):
     conn = sqlite3.connect('pragmatic_lives.db')
     cursor = conn.cursor()
@@ -157,23 +170,13 @@ def exportar_csv(df):
     df.to_csv("dados_pragmatic.csv", index=False)
     st.success("Arquivo CSV exportado com sucesso!")
 
-# ------------------------------
-# ROTINA AUTOMÁTICA
-# ------------------------------
 def rotina_agendada():
     global PRAGMATIC_KEYWORDS
     PRAGMATIC_KEYWORDS = carregar_keywords()
-
-    print("🔍 Iniciando rotina de varredura...")
     twitch = buscar_lives_twitch()
     twitch_pragmatic = filtrar_lives_twitch(twitch)
     youtube_pragmatic = buscar_videos_youtube()
     todos = twitch_pragmatic + youtube_pragmatic
-
-    print(f"Twitch: {len(twitch)} encontrados | {len(twitch_pragmatic)} com palavra-chave")
-    print(f"YouTube: {len(youtube_pragmatic)} lives encontradas")
-    print(f"Total a salvar: {len(todos)} lives")
-
     salvar_no_banco(todos)
 
 def iniciar_agendamento():
@@ -185,9 +188,6 @@ def iniciar_agendamento():
 agendador = threading.Thread(target=iniciar_agendamento, daemon=True)
 agendador.start()
 
-# ------------------------------
-# STREAMLIT DASHBOARD
-# ------------------------------
 st.set_page_config(page_title="Monitor Pragmatic - Twitch & YouTube", layout="wide")
 st.title("🎰 Monitor de Jogos Pragmatic Play - Twitch & YouTube (BR)")
 
@@ -239,3 +239,20 @@ if not df.empty:
 ![]({row['thumbnail']})
 ---
 """)
+
+st.subheader("📅 Buscar vídeos do YouTube postados nos últimos 30 dias")
+if st.button("📥 Buscar vídeos recentes"):
+    vods = buscar_videos_youtube_vods()
+    if vods:
+        for v in vods:
+            st.markdown(f"""
+**{v['streamer']}** postou:
+
+🎮 *{v['game']}*  
+📅 Publicado: {v['published_at']}  
+🔗 [Assistir agora]({v['url']})  
+![]({v['thumbnail']})
+---
+""")
+    else:
+        st.info("Nenhum vídeo recente encontrado com as palavras-chave.")
