@@ -87,18 +87,18 @@ def buscar_videos_youtube():
         }
         search_response = requests.get(YOUTUBE_SEARCH_URL, params=params)
         data = search_response.json()
+        print(f"[YouTube] Resposta para '{keyword}':", data)
 
         video_ids = [item['id']['videoId'] for item in data.get('items', [])]
         if not video_ids:
             continue
 
-        video_details_url = 'https://www.googleapis.com/youtube/v3/videos'
         detail_params = {
             'part': 'snippet,liveStreamingDetails,statistics',
             'id': ','.join(video_ids),
             'key': YOUTUBE_API_KEY
         }
-        detail_response = requests.get(video_details_url, params=detail_params)
+        detail_response = requests.get('https://www.googleapis.com/youtube/v3/videos', params=detail_params)
         detail_data = detail_response.json()
 
         for item in detail_data.get('items', []):
@@ -163,14 +163,21 @@ def exportar_csv(df):
 def rotina_agendada():
     global PRAGMATIC_KEYWORDS
     PRAGMATIC_KEYWORDS = carregar_keywords()
+
+    print("🔍 Iniciando rotina de varredura...")
     twitch = buscar_lives_twitch()
     twitch_pragmatic = filtrar_lives_twitch(twitch)
     youtube_pragmatic = buscar_videos_youtube()
     todos = twitch_pragmatic + youtube_pragmatic
+
+    print(f"Twitch: {len(twitch)} encontrados | {len(twitch_pragmatic)} com palavra-chave")
+    print(f"YouTube: {len(youtube_pragmatic)} lives encontradas")
+    print(f"Total a salvar: {len(todos)} lives")
+
     salvar_no_banco(todos)
 
 def iniciar_agendamento():
-    schedule.every(2).minutes.do(rotina_agendada)
+    schedule.every(10).minutes.do(rotina_agendada)
     while True:
         schedule.run_pending()
         time.sleep(1)
