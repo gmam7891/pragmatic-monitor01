@@ -8,6 +8,10 @@ import schedule
 import time
 import threading
 import os
+import cv2
+import numpy as np
+from PIL import Image
+from io import BytesIO
 
 # ------------------------------
 # CONFIGURAÇÕES INICIAIS
@@ -24,7 +28,12 @@ BASE_URL_TWITCH = 'https://api.twitch.tv/helix/'
 YOUTUBE_SEARCH_URL = 'https://www.googleapis.com/youtube/v3/search'
 
 KEYWORDS_FILE = "keywords.txt"
+STREAMERS_FILE = "streamers.txt"
+TARGET_IMAGE_PATH = "target_icon.png"  # ícone para detecção
 
+# ------------------------------
+# UTILITÁRIOS
+# ------------------------------
 def carregar_keywords():
     if not os.path.exists(KEYWORDS_FILE):
         with open(KEYWORDS_FILE, "w", encoding="utf-8") as f:
@@ -36,8 +45,41 @@ def adicionar_keyword(nova):
     with open(KEYWORDS_FILE, "a", encoding="utf-8") as f:
         f.write(f"{nova.strip()}\n")
 
-PRAGMATIC_KEYWORDS = carregar_keywords()
+def carregar_streamers():
+    if not os.path.exists(STREAMERS_FILE):
+        with open(STREAMERS_FILE, "w", encoding="utf-8") as f:
+            f.write("ExemploStreamer\n")
+    with open(STREAMERS_FILE, "r", encoding="utf-8") as f:
+        return [linha.strip() for linha in f if linha.strip()]
 
+def adicionar_streamer(novo):
+    with open(STREAMERS_FILE, "a", encoding="utf-8") as f:
+        f.write(f"{novo.strip()}\n")
+
+PRAGMATIC_KEYWORDS = carregar_keywords()
+STREAMERS_INTERESSE = carregar_streamers()
+
+# ------------------------------
+# DETECÇÃO DE IMAGEM
+# ------------------------------
+def verificar_imagem_na_thumbnail(thumbnail_url):
+    try:
+        response = requests.get(thumbnail_url)
+        if response.status_code != 200:
+            return False
+        img_np = np.array(Image.open(BytesIO(response.content)).convert("RGB"))
+        target_img = cv2.imread(TARGET_IMAGE_PATH)
+        img_rgb = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+        res = cv2.matchTemplate(img_rgb, target_img, cv2.TM_CCOEFF_NORMED)
+        threshold = 0.8
+        loc = np.where(res >= threshold)
+        return len(loc[0]) > 0
+    except Exception:
+        return False
+
+# ------------------------------
+# TWITCH
+# ------------------------------
 def buscar_lives_twitch():
     url = BASE_URL_TWITCH + 'streams?game_id=509577&first=100&language=pt'
     response = requests.get(url, headers=HEADERS_TWITCH)
@@ -47,6 +89,11 @@ def filtrar_lives_twitch(lives):
     pragmatic_lives = []
     for live in lives:
         title = live['title'].lower()
+        streamer_name = live['user_name'].lower()
+        if streamer_name not in [s.lower() for s in STREAMERS_INTERESSE]:
+            continue
+        if not verificar_imagem_na_thumbnail(live['thumbnail_url'].replace('{width}', '320').replace('{height}', '180')):
+            continue
         for keyword in PRAGMATIC_KEYWORDS:
             if keyword.lower() in title:
                 started_at = datetime.strptime(live['started_at'], "%Y-%m-%dT%H:%M:%SZ")
@@ -63,49 +110,9 @@ def filtrar_lives_twitch(lives):
                 })
     return pragmatic_lives
 
-def buscar_videos_youtube():
-    lives = []
-    for keyword in PRAGMATIC_KEYWORDS:
-        params = {
-            'part': 'snippet',
-            'q': keyword,
-            'type': 'video',
-            'eventType': 'live',
-            'regionCode': 'BR',
-            'relevanceLanguage': 'pt',
-            'key': YOUTUBE_API_KEY,
-            'maxResults': 10
-        }
-        response = requests.get(YOUTUBE_SEARCH_URL, params=params)
-        data = response.json()
-        video_ids = [item['id']['videoId'] for item in data.get('items', [])]
-        if not video_ids:
-            continue
-
-        detail_params = {
-            'part': 'snippet,liveStreamingDetails,statistics',
-            'id': ','.join(video_ids),
-            'key': YOUTUBE_API_KEY
-        }
-        detail_response = requests.get('https://www.googleapis.com/youtube/v3/videos', params=detail_params)
-        detail_data = detail_response.json()
-
-        for item in detail_data.get('items', []):
-            snippet = item['snippet']
-            stats = item.get('statistics', {})
-            live_details = item.get('liveStreamingDetails', {})
-            lives.append({
-                'plataforma': 'YouTube',
-                'streamer': snippet['channelTitle'],
-                'title': snippet['title'],
-                'viewer_count': int(stats.get('concurrentViewers', 0)) if 'concurrentViewers' in stats else 0,
-                'started_at': live_details.get('actualStartTime', snippet['publishedAt']).replace("T", " ").replace("Z", ""),
-                'game': keyword,
-                'url': f"https://www.youtube.com/watch?v={item['id']}",
-                'thumbnail': snippet['thumbnails']['medium']['url']
-            })
-    return lives
-
+# ------------------------------
+# YOUTUBE VODs (Últimos 30 dias)
+# ------------------------------
 def buscar_videos_youtube_vods():
     videos = []
     data_limite = (datetime.utcnow() - timedelta(days=30)).isoformat("T") + "Z"
@@ -134,6 +141,9 @@ def buscar_videos_youtube_vods():
             })
     return videos
 
+# ------------------------------
+# BANCO DE DADOS
+# ------------------------------
 def salvar_no_banco(dados):
     conn = sqlite3.connect('pragmatic_lives.db')
     cursor = conn.cursor()
@@ -166,18 +176,15 @@ def carregar_dados():
     conn.close()
     return df
 
-def exportar_csv(df):
-    df.to_csv("dados_pragmatic.csv", index=False)
-    st.success("Arquivo CSV exportado com sucesso!")
-
+# ------------------------------
+# AGENDAMENTO
+# ------------------------------
 def rotina_agendada():
     global PRAGMATIC_KEYWORDS
     PRAGMATIC_KEYWORDS = carregar_keywords()
     twitch = buscar_lives_twitch()
     twitch_pragmatic = filtrar_lives_twitch(twitch)
-    youtube_pragmatic = buscar_videos_youtube()
-    todos = twitch_pragmatic + youtube_pragmatic
-    salvar_no_banco(todos)
+    salvar_no_banco(twitch_pragmatic)
 
 def iniciar_agendamento():
     schedule.every(10).minutes.do(rotina_agendada)
@@ -188,6 +195,9 @@ def iniciar_agendamento():
 agendador = threading.Thread(target=iniciar_agendamento, daemon=True)
 agendador.start()
 
+# ------------------------------
+# STREAMLIT DASHBOARD
+# ------------------------------
 st.set_page_config(page_title="Monitor Pragmatic - Twitch & YouTube", layout="wide")
 st.title("🎰 Monitor de Jogos Pragmatic Play - Twitch & YouTube (BR)")
 
@@ -196,6 +206,12 @@ nova_keyword = st.sidebar.text_input("Nova keyword")
 if st.sidebar.button("Adicionar keyword"):
     adicionar_keyword(nova_keyword)
     st.sidebar.success(f"'{nova_keyword}' adicionada. Recarregue a página para atualizar.")
+
+st.sidebar.subheader("➕ Adicionar streamer de interesse")
+novo_streamer = st.sidebar.text_input("Novo streamer")
+if st.sidebar.button("Adicionar streamer"):
+    adicionar_streamer(novo_streamer)
+    st.sidebar.success(f"'{novo_streamer}' adicionado. Recarregue a página para atualizar.")
 
 col1, col2 = st.columns(2)
 if col1.button("🔍 Buscar agora"):
@@ -211,7 +227,8 @@ else:
     st.info("Nenhum dado carregado ainda.")
 
 if not df.empty and st.button("📁 Exportar CSV"):
-    exportar_csv(df)
+    df.to_csv("dados_pragmatic.csv", index=False)
+    st.success("Arquivo CSV exportado com sucesso!")
 
 if not df.empty:
     st.subheader("📈 Estatísticas")
