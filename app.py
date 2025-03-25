@@ -72,7 +72,7 @@ def filtrar_lives_twitch(lives):
         started_at = datetime.strptime(live['started_at'], "%Y-%m-%dT%H:%M:%SZ")
         started_at = started_at.replace(tzinfo=pytz.utc).astimezone(pytz.timezone("America/Sao_Paulo"))
         pragmatic_lives.append({
-            'plataforma': 'Twitch',
+            'plataforma': 'Twitch (ao vivo)',
             'streamer': live['user_name'],
             'title': live['title'],
             'viewer_count': live['viewer_count'],
@@ -103,7 +103,7 @@ def buscar_vods_twitch_por_periodo(data_inicio, data_fim):
             if not (data_inicio <= created_at <= data_fim):
                 continue
             vods.append({
-                'plataforma': 'Twitch VOD',
+                'plataforma': 'Twitch (VOD)',
                 'streamer': video['user_name'],
                 'title': video['title'],
                 'viewer_count': video.get('view_count', 0),
@@ -113,6 +113,42 @@ def buscar_vods_twitch_por_periodo(data_inicio, data_fim):
                 'thumbnail': video['thumbnail_url']
             })
     return vods
+
+# ------------------------------
+# YOUTUBE
+# ------------------------------
+def buscar_youtube_videos_por_periodo(data_inicio, data_fim):
+    videos = []
+    published_after = data_inicio.isoformat("T") + "Z"
+    published_before = data_fim.isoformat("T") + "Z"
+    for streamer in STREAMERS_INTERESSE:
+        params = {
+            'part': 'snippet',
+            'channelType': 'any',
+            'q': streamer,
+            'type': 'video',
+            'publishedAfter': published_after,
+            'publishedBefore': published_before,
+            'regionCode': 'BR',
+            'relevanceLanguage': 'pt',
+            'key': YOUTUBE_API_KEY,
+            'maxResults': 10
+        }
+        response = requests.get(YOUTUBE_SEARCH_URL, params=params)
+        data = response.json()
+        for item in data.get('items', []):
+            snippet = item['snippet']
+            videos.append({
+                'plataforma': 'YouTube',
+                'streamer': snippet['channelTitle'],
+                'title': snippet['title'],
+                'viewer_count': 0,
+                'started_at': snippet['publishedAt'].replace("T", " ").replace("Z", ""),
+                'game': 'Cassino (palavra-chave)',
+                'url': f"https://www.youtube.com/watch?v={item['id']['videoId']}",
+                'thumbnail': snippet['thumbnails']['medium']['url']
+            })
+    return videos
 
 # ------------------------------
 # STREAMLIT DASHBOARD
@@ -125,14 +161,14 @@ data_inicio = st.date_input("Data de início", value=datetime.today() - timedelt
 data_fim = st.date_input("Data de fim", value=datetime.today())
 
 if st.button("📥 Buscar conteúdo Cassino"):
-    twitch_lives = buscar_lives_twitch()
-    twitch_cassino = filtrar_lives_twitch(twitch_lives)
-
     dt_inicio = datetime.combine(data_inicio, datetime.min.time())
     dt_fim = datetime.combine(data_fim, datetime.max.time())
 
+    twitch_lives = buscar_lives_twitch()
+    twitch_cassino = filtrar_lives_twitch(twitch_lives)
     twitch_vods = buscar_vods_twitch_por_periodo(dt_inicio, dt_fim)
-    todos = twitch_cassino + twitch_vods
+    youtube_videos = buscar_youtube_videos_por_periodo(dt_inicio, dt_fim)
+    todos = twitch_cassino + twitch_vods + youtube_videos
 
     if todos:
         st.subheader(f"🎞️ Conteúdo de Cassino de {data_inicio.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')}")
