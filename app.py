@@ -43,7 +43,7 @@ def adicionar_keyword(nova):
 def carregar_streamers():
     if not os.path.exists(STREAMERS_FILE):
         with open(STREAMERS_FILE, "w", encoding="utf-8") as f:
-            f.write("ExemploStreamer\n")
+            f.write("jukes\n")
     with open(STREAMERS_FILE, "r", encoding="utf-8") as f:
         return [linha.strip() for linha in f if linha.strip()]
 
@@ -65,7 +65,7 @@ def buscar_lives_twitch():
 def filtrar_lives_twitch(lives):
     pragmatic_lives = []
     for live in lives:
-        if live.get('game_name', '').lower() != 'virtual casino':
+        if live.get('game_id') != '509577':  # Virtual Casino
             continue
         title = live['title'].lower()
         streamer_name = live['user_name'].lower()
@@ -87,45 +87,50 @@ def filtrar_lives_twitch(lives):
                 })
     return pragmatic_lives
 
-def buscar_vods_twitch():
-    vods = []
-    base_url = BASE_URL_TWITCH + 'videos'
-    data_limite = datetime.utcnow() - timedelta(days=30)
-    for streamer in STREAMERS_INTERESSE:
-        user_data = requests.get(BASE_URL_TWITCH + f'users?login={streamer}', headers=HEADERS_TWITCH).json()
-        if not user_data.get('data'):
-            continue
-        user_id = user_data['data'][0]['id']
+# ------------------------------
+# YOUTUBE
+# ------------------------------
+def buscar_videos_youtube():
+    lives = []
+    for keyword in PRAGMATIC_KEYWORDS:
         params = {
-            'user_id': user_id,
-            'first': 50,
-            'type': 'archive'
+            'part': 'snippet',
+            'q': keyword,
+            'type': 'video',
+            'eventType': 'live',
+            'regionCode': 'BR',
+            'relevanceLanguage': 'pt',
+            'key': YOUTUBE_API_KEY,
+            'maxResults': 10
         }
-        response = requests.get(base_url, headers=HEADERS_TWITCH, params=params)
-        if response.status_code != 200:
+        response = requests.get(YOUTUBE_SEARCH_URL, params=params)
+        data = response.json()
+        video_ids = [item['id']['videoId'] for item in data.get('items', [])]
+        if not video_ids:
             continue
-        data = response.json().get('data', [])
-        for video in data:
-            created_at = datetime.strptime(video['created_at'], "%Y-%m-%dT%H:%M:%SZ")
-            if created_at < data_limite:
-                continue
-            for keyword in PRAGMATIC_KEYWORDS:
-                if keyword.lower() in video['title'].lower():
-                    vods.append({
-                        'plataforma': 'Twitch VOD',
-                        'streamer': streamer,
-                        'title': video['title'],
-                        'viewer_count': video.get('view_count', 0),
-                        'started_at': created_at.strftime('%Y-%m-%d %H:%M:%S'),
-                        'game': keyword,
-                        'url': video['url'],
-                        'thumbnail': video['thumbnail_url']
-                    })
-    return vods
+        detail_params = {
+            'part': 'snippet,liveStreamingDetails,statistics',
+            'id': ','.join(video_ids),
+            'key': YOUTUBE_API_KEY
+        }
+        detail_response = requests.get('https://www.googleapis.com/youtube/v3/videos', params=detail_params)
+        detail_data = detail_response.json()
+        for item in detail_data.get('items', []):
+            snippet = item['snippet']
+            stats = item.get('statistics', {})
+            live_details = item.get('liveStreamingDetails', {})
+            lives.append({
+                'plataforma': 'YouTube',
+                'streamer': snippet['channelTitle'],
+                'title': snippet['title'],
+                'viewer_count': int(stats.get('concurrentViewers', 0)) if 'concurrentViewers' in stats else 0,
+                'started_at': live_details.get('actualStartTime', snippet['publishedAt']).replace("T", " ").replace("Z", ""),
+                'game': keyword,
+                'url': f"https://www.youtube.com/watch?v={item['id']}",
+                'thumbnail': snippet['thumbnails']['medium']['url']
+            })
+    return lives
 
-# ------------------------------
-# YOUTUBE VODs (Últimos 30 dias)
-# ------------------------------
 def buscar_videos_youtube_vods():
     videos = []
     data_limite = (datetime.utcnow() - timedelta(days=30)).isoformat("T") + "Z"
@@ -189,16 +194,21 @@ def carregar_dados():
     conn.close()
     return df
 
+def exportar_csv(df):
+    df.to_csv("dados_pragmatic.csv", index=False)
+    st.success("Arquivo CSV exportado com sucesso!")
+
 # ------------------------------
-# AGENDAMENTO
+# EXECUÇÃO
 # ------------------------------
 def rotina_agendada():
     global PRAGMATIC_KEYWORDS
     PRAGMATIC_KEYWORDS = carregar_keywords()
     twitch = buscar_lives_twitch()
     twitch_pragmatic = filtrar_lives_twitch(twitch)
-    vods_twitch = buscar_vods_twitch()
-    salvar_no_banco(twitch_pragmatic + vods_twitch)
+    youtube_pragmatic = buscar_videos_youtube()
+    todos = twitch_pragmatic + youtube_pragmatic
+    salvar_no_banco(todos)
 
 def iniciar_agendamento():
     schedule.every(10).minutes.do(rotina_agendada)
@@ -210,7 +220,7 @@ agendador = threading.Thread(target=iniciar_agendamento, daemon=True)
 agendador.start()
 
 # ------------------------------
-# STREAMLIT DASHBOARD
+# STREAMLIT UI
 # ------------------------------
 st.set_page_config(page_title="Monitor Pragmatic - Twitch & YouTube", layout="wide")
 st.title("🎰 Monitor de Jogos Pragmatic Play - Twitch & YouTube (BR)")
@@ -221,11 +231,11 @@ if st.sidebar.button("Adicionar keyword"):
     adicionar_keyword(nova_keyword)
     st.sidebar.success(f"'{nova_keyword}' adicionada. Recarregue a página para atualizar.")
 
-st.sidebar.subheader("➕ Adicionar streamer de interesse")
+st.sidebar.subheader("👤 Adicionar streamer")
 novo_streamer = st.sidebar.text_input("Novo streamer")
 if st.sidebar.button("Adicionar streamer"):
     adicionar_streamer(novo_streamer)
-    st.sidebar.success(f"'{novo_streamer}' adicionado. Recarregue a página para atualizar.")
+    st.sidebar.success(f"Streamer '{novo_streamer}' adicionado.")
 
 col1, col2 = st.columns(2)
 if col1.button("🔍 Buscar agora"):
@@ -241,8 +251,7 @@ else:
     st.info("Nenhum dado carregado ainda.")
 
 if not df.empty and st.button("📁 Exportar CSV"):
-    df.to_csv("dados_pragmatic.csv", index=False)
-    st.success("Arquivo CSV exportado com sucesso!")
+    exportar_csv(df)
 
 if not df.empty:
     st.subheader("📈 Estatísticas")
