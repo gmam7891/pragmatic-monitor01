@@ -12,8 +12,8 @@ import os
 # ------------------------------
 # CONFIGURAÇÕES INICIAIS
 # ------------------------------
-CLIENT_ID = 'j088mb4n39biag9x2grhnw2b8jd5wa'
-ACCESS_TOKEN = 'j088mb4n39biag9x2grhnw2b8jd5wa'
+CLIENT_ID = 'gp762nuuoqcoxypju8c569th9wz7q5'
+ACCESS_TOKEN = 'rucd7fsbrt5uuajjrnjuid3kjwlcqg'
 YOUTUBE_API_KEY = 'AIzaSyB3r4wPR7B8y2JOl2JSpM-CbBUwvhqZm84'
 
 HEADERS_TWITCH = {
