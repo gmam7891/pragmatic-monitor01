@@ -246,7 +246,7 @@ if 'dados_lives' in st.session_state:
     st.download_button("📁 Exportar CSV - Lives", data=df.to_csv(index=False).encode('utf-8'), file_name="detecao_lives.csv", mime="text/csv")
     with BytesIO() as b:
         df.to_excel(b, index=False, engine='openpyxl')
-        st.download_button("📊 Exportar Excel - Lives", data=b.getvalue(), file_name="detecao_lives.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").encode('utf-8'), file_name="detecao_lives.csv", mime="text/csv")
+        st.download_button("📊 Exportar Excel - Lives", data=b.getvalue(), file_name="detecao_lives.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 if 'dados_vods' in st.session_state:
     df = pd.DataFrame(st.session_state['dados_vods'])
@@ -258,7 +258,7 @@ if 'dados_vods' in st.session_state:
     st.download_button("📁 Exportar CSV - VODs", data=df.to_csv(index=False).encode('utf-8'), file_name="detecao_vods.csv", mime="text/csv")
     with BytesIO() as b:
         df.to_excel(b, index=False, engine='openpyxl')
-        st.download_button("📊 Exportar Excel - VODs", data=b.getvalue(), file_name="detecao_vods.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").encode('utf-8'), file_name="detecao_vods.csv", mime="text/csv")
+        st.download_button("📊 Exportar Excel - VODs", data=b.getvalue(), file_name="detecao_vods.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 if 'dados_url' in st.session_state:
     df = pd.DataFrame(st.session_state['dados_url'])
@@ -267,7 +267,7 @@ if 'dados_url' in st.session_state:
     st.download_button("📁 Exportar CSV - URL personalizada", data=df.to_csv(index=False).encode('utf-8'), file_name="detecao_url.csv", mime="text/csv")
     with BytesIO() as b:
         df.to_excel(b, index=False, engine='openpyxl')
-        st.download_button("📊 Exportar Excel - URL personalizada", data=b.getvalue(), file_name="detecao_url.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").encode('utf-8'), file_name="detecao_url.csv", mime="text/csv")
+        st.download_button("📊 Exportar Excel - URL personalizada", data=b.getvalue(), file_name="detecao_url.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 if not any(k in st.session_state for k in ['dados_lives', 'dados_vods', 'dados_url']):
     st.info("Nenhuma detecção encontrada.")
