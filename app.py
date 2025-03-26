@@ -26,6 +26,7 @@ HEADERS_TWITCH = {
 BASE_URL_TWITCH = 'https://api.twitch.tv/helix/'
 STREAMERS_FILE = "streamers.txt"
 TEMPLATES_DIR = "templates/"
+MAIN_TEMPLATE_NAME = "botao"
 
 # ------------------------------
 # GARANTIR QUE A PASTA TEMPLATES EXISTA
@@ -52,14 +53,16 @@ def match_template_from_image(image_path):
     img = cv2.imread(image_path)
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    for template_name in os.listdir(TEMPLATES_DIR):
-        template_path = os.path.join(TEMPLATES_DIR, template_name)
-        template = cv2.imread(template_path, 0)
-        if template is None:
-            continue
-        res = cv2.matchTemplate(img_gray, template, cv2.TM_CCOEFF_NORMED)
-        if np.any(res >= 0.8):
-            return template_name.split('.')[0]
+    template_path = os.path.join(TEMPLATES_DIR, f"{MAIN_TEMPLATE_NAME}.png")
+    if not os.path.exists(template_path):
+        template_path = os.path.join(TEMPLATES_DIR, f"{MAIN_TEMPLATE_NAME}.jpg")
+    if not os.path.exists(template_path):
+        return None
+
+    template = cv2.imread(template_path, 0)
+    res = cv2.matchTemplate(img_gray, template, cv2.TM_CCOEFF_NORMED)
+    if np.any(res >= 0.8):
+        return MAIN_TEMPLATE_NAME
     return None
 
 # ------------------------------
@@ -165,7 +168,6 @@ def rotina_agendada():
                 "fonte": "Live"
             })
     st.session_state['dados_lives'] = resultados
-
 
 def iniciar_agendamento():
     schedule.every(10).minutes.do(rotina_agendada)
