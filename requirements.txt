@@ -8,3 +8,4 @@ Pillow
 imageio
 imageio-ffmpeg
 schedule
+openpyxl
