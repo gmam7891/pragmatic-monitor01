@@ -178,13 +178,10 @@ def buscar_vods_twitch_por_periodo(data_inicio, data_fim):
                 resultados.append({
                     "streamer": streamer,
                     "jogo_detectado": jogo,
-                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "fonte": "Live",
-                    "categoria": categoria
-                })
-                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "fonte": "Live",
-                    "categoria": categoria
+                    "timestamp": created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                    "fonte": "Twitch VOD",
+                    "categoria": game_name,
+                    "url": vod['url']
                 })
         st.session_state['dados_lives'] = resultados
 
