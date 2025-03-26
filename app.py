@@ -54,16 +54,13 @@ def match_template_from_image(image_path):
     img = cv2.imread(image_path)
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    template_path_png = os.path.join(TEMPLATES_DIR, f"{MAIN_TEMPLATE_NAME}.png")
-    template_path_jpg = os.path.join(TEMPLATES_DIR, f"{MAIN_TEMPLATE_NAME}.jpg")
-
-    if os.path.exists(template_path_png):
-        template = cv2.imread(template_path_png, 0)
-    elif os.path.exists(template_path_jpg):
-        template = cv2.imread(template_path_jpg, 0)
-    else:
+    template_path = os.path.join(TEMPLATES_DIR, f"{MAIN_TEMPLATE_NAME}.png")
+    if not os.path.exists(template_path):
+        template_path = os.path.join(TEMPLATES_DIR, f"{MAIN_TEMPLATE_NAME}.jpg")
+    if not os.path.exists(template_path):
         return None
 
+    template = cv2.imread(template_path, 0)
     res = cv2.matchTemplate(img_gray, template, cv2.TM_CCOEFF_NORMED)
     if np.any(res >= 0.8):
         return MAIN_TEMPLATE_NAME
@@ -105,12 +102,12 @@ def verificar_jogo_em_live(streamer):
 # VERIFICAÇÃO POR URL COLADA
 # ------------------------------
 def url_para_m3u8(url):
-    match_vod = re.search(r'twitch\.tv/videos/(\d+)', url)
+    match_vod = re.search(r'twitch\\.tv/videos/(\\d+)', url)
     if match_vod:
         video_id = match_vod.group(1)
         return f"https://vod-secure.twitch.tv/{video_id}/{video_id}.m3u8"
 
-    match_live = re.search(r'twitch\.tv/([\w\d_]+)', url)
+    match_live = re.search(r'twitch\\.tv/([\\w\\d_]+)', url)
     if match_live:
         user_login = match_live.group(1)
         return f"https://usher.ttvnw.net/api/channel/hls/{user_login}.m3u8"
@@ -120,9 +117,6 @@ def url_para_m3u8(url):
 # ------------------------------
 # INTERFACE STREAMLIT (EXTRA: VERIFICAR URL DIRETA)
 # ------------------------------
-st.set_page_config(page_title="Monitor de Jogos Pragmatic Play - Verificação ao Vivo", layout="wide")
-st.title("🎰 Monitor de Jogos Pragmatic Play - Verificação ao Vivo")
-
 st.sidebar.subheader("🔗 Verificar jogo via URL direta")
 url_direta = st.sidebar.text_input("Cole o link da Twitch (live ou VOD)")
 if st.sidebar.button("🚀 Verificar URL") and url_direta:
@@ -132,34 +126,12 @@ if st.sidebar.button("🚀 Verificar URL") and url_direta:
         frame_ok = capturar_frame_ffmpeg_imageio(m3u8, temp_path)
         if frame_ok:
             jogo = match_template_from_image(temp_path)
+            os.remove(temp_path)
             if jogo:
                 st.success(f"Jogo da Pragmatic detectado: {jogo}")
-                st.image(temp_path, caption="Frame analisado")
             else:
                 st.warning("Nenhum jogo da Pragmatic foi detectado.")
-            os.remove(temp_path)
         else:
             st.error("Erro ao capturar frame da URL fornecida.")
     else:
         st.error("URL inválida ou não reconhecida.")
-
-# ------------------------------
-# VERIFICAÇÃO DE TODOS STREAMERS (BOTÃO PRINCIPAL)
-# ------------------------------
-st.write("Clique abaixo para verificar os streamers configurados.")
-
-if st.button("🎯 Verificar lives ao vivo via ffmpeg"):
-    resultados = []
-    for streamer in STREAMERS_INTERESSE:
-        jogo = verificar_jogo_em_live(streamer)
-        if jogo:
-            resultados.append({
-                "streamer": streamer,
-                "jogo_detectado": jogo,
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            })
-    if resultados:
-        df = pd.DataFrame(resultados)
-        st.dataframe(df)
-    else:
-        st.info("Nenhum jogo da Pragmatic detectado em tempo real.")
