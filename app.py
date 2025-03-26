@@ -185,7 +185,13 @@ with col1:
             resultado_live = verificar_jogo_em_live(streamer)
             if resultado_live:
                 jogo, categoria = resultado_live
-            if jogo:
+                resultados.append({
+                    "streamer": streamer,
+                    "jogo_detectado": jogo,
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "fonte": "Live",
+                    "categoria": categoria
+                })
                 resultados.append({
                     "streamer": streamer,
                     "jogo_detectado": jogo,
@@ -215,6 +221,9 @@ if 'dados_lives' in st.session_state:
         df = df[df['streamer'].str.lower().isin(streamers_filtrados)]
         df = df[df['streamer'].str.lower().isin(streamers_filtrados)]
     st.subheader("📡 Detecções em Lives")
+    for col in ['categoria']:
+        if col in df.columns:
+            df[col] = df[col].apply(lambda x: f"🎯 {x}")
     st.dataframe(df, use_container_width=True)
 
 if 'dados_vods' in st.session_state:
