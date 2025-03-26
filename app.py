@@ -15,8 +15,8 @@ import threading
 # ------------------------------
 # CONFIGURAÇÕES INICIAIS
 # ------------------------------
-CLIENT_ID = '9qkw87yuzfolbyk3lva3n76qhucrxe'
-ACCESS_TOKEN = '6qgrr9jy215szvksczidb8hslztux8'
+CLIENT_ID = 'gp762nuuoqcoxypju8c569th9wz7q5'
+ACCESS_TOKEN = 'moila7dw5ejlk3eja6ne08arw0oexs'
 HEADERS_TWITCH = {
     'Client-ID': CLIENT_ID,
     'Authorization': f'Bearer {ACCESS_TOKEN}'
