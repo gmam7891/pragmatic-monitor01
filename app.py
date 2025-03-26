@@ -69,7 +69,6 @@ def get_stream_m3u8_url(user_login):
 
 def capturar_frame_ffmpeg_imageio(m3u8_url, output_path="frame.jpg"):
     try:
-        # cria o pipe ffmpeg e lê um frame como imagem bruta
         width, height = 640, 360
         cmd = [
             "-i", m3u8_url,
@@ -126,11 +125,18 @@ agendador.start()
 st.set_page_config(page_title="Monitor Cassino PP - Detecção ao vivo", layout="wide")
 st.title("🎰 Monitor de Jogos da Pragmatic Play - Detecção por Imagem em Lives")
 
+st.sidebar.subheader("🎯 Filtrar por streamer")
+streamers_input = st.sidebar.text_input("Digite os nomes separados por vírgula", "")
+
+streamers_filtrados = [s.strip().lower() for s in streamers_input.split(",") if s.strip()] if streamers_input else []
+
 if st.button("🔍 Verificar lives agora"):
     rotina_agendada()
 
 if 'dados_lives' in st.session_state and st.session_state['dados_lives']:
     df = pd.DataFrame(st.session_state['dados_lives'])
+    if streamers_filtrados:
+        df = df[df['streamer'].str.lower().isin(streamers_filtrados)]
     st.dataframe(df, use_container_width=True)
     st.download_button("📁 Exportar CSV", data=df.to_csv(index=False).encode('utf-8'), file_name="detecao_pragmatic.csv", mime="text/csv")
 else:
