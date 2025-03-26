@@ -1,7 +1,10 @@
 streamlit
-pandas
 requests
+pandas
 numpy
-pytz
 opencv-python-headless
+pytz
+Pillow
+imageio
 imageio-ffmpeg
+schedule
