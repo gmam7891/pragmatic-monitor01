@@ -99,11 +99,6 @@ def verificar_jogo_em_live(streamer):
         user_data = user_response.json().get('data', [])
         if not user_data:
             return None
-        user_id = user_data[0]['id']
-        stream_response = requests.get(BASE_URL_TWITCH + f'streams?user_id={user_id}', headers=HEADERS_TWITCH)
-        stream_data = stream_response.json().get('data', [])
-        if not stream_data:
-            return None
         game_id = stream_data[0].get('game_id')
         game_name = ""
 
@@ -132,7 +127,24 @@ def verificar_jogo_em_live(streamer):
 
     except Exception as e:
         print(f"Erro ao verificar live de {streamer}: {e}")
-    
+    return None
+        game_id = stream_data[0].get('game_id')
+        if not game_id:
+            return None
+        game_response = requests.get(BASE_URL_TWITCH + f'games?id={game_id}', headers=HEADERS_TWITCH)
+        game_data = game_response.json().get("data", [])
+        if not game_data or game_data[0]['name'].lower() != categoria_filtro.strip().lower():
+            return None
+
+        m3u8_url = get_stream_m3u8_url(streamer)
+        temp_frame = f"{streamer}_frame.jpg"
+        if capturar_frame_ffmpeg_imageio(m3u8_url, temp_frame):
+            jogo = match_template_from_image(temp_frame)
+            os.remove(temp_frame)
+            return jogo, game_data[0]['name'] if game_data else "Desconhecida"
+    except Exception as e:
+        print(f"Erro ao verificar live de {streamer}: {e}")
+    return None
     return None
 
 def buscar_vods_twitch_por_periodo(data_inicio, data_fim):
@@ -176,60 +188,13 @@ def buscar_vods_twitch_por_periodo(data_inicio, data_fim):
                     jogo = "-"
 
                 resultados.append({
-                    "streamer": streamer,
-                    "jogo_detectado": jogo,
-                    "timestamp": created_at.strftime("%Y-%m-%d %H:%M:%S"),
-                    "fonte": "Twitch VOD",
-                    "categoria": game_name,
-                    "url": vod['url']
-                })
-        except Exception as e:
-            print(f"Erro ao buscar VODs: {e}")
-    return resultados
-
-# ------------------------------
-# INTERFACE STREAMLIT
-# ------------------------------
-st.set_page_config(page_title="Monitor Cassino PP - Detecção", layout="wide")
-st.title("🎰 Monitor de Jogos - Detecção por Imagem")
-
-st.sidebar.subheader("🎯 Filtros")
-modo_operacao = st.sidebar.selectbox("Modo de Varredura", [
-    "1 - Apenas Live",
-    "2 - Live + Categoria",
-    "3 - Live + Imagem",
-    "4 - Live + Categoria + Imagem"
-])
-modo_vod = st.sidebar.selectbox("Modo de Varredura VOD", [
-    "1 - Apenas VOD",
-    "2 - VOD + Categoria",
-    "3 - VOD + Imagem",
-    "4 - VOD + Categoria + Imagem"
-])
-categoria_filtro = st.sidebar.text_input("Categoria (ex: Virtual Casino)", value="Virtual Casino")
-streamers_input = st.sidebar.text_input("Streamers (separados por vírgula)")
-data_inicio = st.sidebar.date_input("Data de início", value=datetime.today() - timedelta(days=7))
-data_fim = st.sidebar.date_input("Data de fim", value=datetime.today())
-url_custom = st.sidebar.text_input("URL .m3u8 personalizada")
-
-streamers_filtrados = [s.strip().lower() for s in streamers_input.split(",") if s.strip()] if streamers_input else []
-
-col1, col2, col3 = st.columns(3)
-with col1:
-    if st.button("🔍 Verificar lives agora"):
-        resultados = []
-        for streamer in STREAMERS_INTERESSE:
-            resultado_live = verificar_jogo_em_live(streamer)
-            if resultado_live:
-                jogo, categoria = resultado_live
-                resultados.append({
-                    "streamer": streamer,
-                    "jogo_detectado": jogo,
-                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "fonte": "Live",
-                    "categoria": categoria
-                })
-                resultados.append({
+                "streamer": streamer,
+                "jogo_detectado": jogo,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "fonte": "Live",
+                "categoria": categoria
+            })
+            # Removido append duplicado
                     "streamer": streamer,
                     "jogo_detectado": jogo,
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
