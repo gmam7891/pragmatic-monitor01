@@ -1,31 +1,36 @@
 from datetime import datetime, timedelta
 import requests
-import sqlite3
 import streamlit as st
 import pandas as pd
 import pytz
+import os
+import cv2
+import numpy as np
+from PIL import Image
+from io import BytesIO
+import imageio_ffmpeg as ffmpeg
+import threading
 import schedule
 import time
-import threading
-import os
 
 # ------------------------------
 # CONFIGURAÇÕES INICIAIS
 # ------------------------------
 CLIENT_ID = 'gp762nuuoqcoxypju8c569th9wz7q5'
 ACCESS_TOKEN = 'moila7dw5ejlk3eja6ne08arw0oexs'
-YOUTUBE_API_KEY = 'AIzaSyB3r4wPR7B8y2JOl2JSpM-CbBUwvhqZm84'
-
 HEADERS_TWITCH = {
     'Client-ID': CLIENT_ID,
     'Authorization': f'Bearer {ACCESS_TOKEN}'
 }
 BASE_URL_TWITCH = 'https://api.twitch.tv/helix/'
-YOUTUBE_SEARCH_URL = 'https://www.googleapis.com/youtube/v3/search'
-YOUTUBE_VIDEO_URL = 'https://www.googleapis.com/youtube/v3/videos'
-
 STREAMERS_FILE = "streamers.txt"
-GAME_NAME_TARGET = 'Virtual Casino'
+TEMPLATES_DIR = "templates/"
+
+# ------------------------------
+# GARANTIR QUE A PASTA TEMPLATES EXISTA
+# ------------------------------
+if not os.path.exists(TEMPLATES_DIR):
+    os.makedirs(TEMPLATES_DIR)
 
 # ------------------------------
 # UTILITÁRIOS
@@ -37,173 +42,96 @@ def carregar_streamers():
     with open(STREAMERS_FILE, "r", encoding="utf-8") as f:
         return [linha.strip() for linha in f if linha.strip()]
 
-def adicionar_streamer(novo):
-    with open(STREAMERS_FILE, "a", encoding="utf-8") as f:
-        f.write(f"{novo.strip()}\n")
-
 STREAMERS_INTERESSE = carregar_streamers()
 
 # ------------------------------
-# TWITCH
+# TEMPLATE MATCHING
 # ------------------------------
-def buscar_lives_twitch():
-    url = BASE_URL_TWITCH + 'streams?first=100&language=pt'
-    response = requests.get(url, headers=HEADERS_TWITCH)
-    return response.json().get('data', [])
+def match_template_from_image(image_path):
+    img = cv2.imread(image_path)
+    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-def buscar_game_name(game_id):
-    response = requests.get(BASE_URL_TWITCH + f'games?id={game_id}', headers=HEADERS_TWITCH)
-    data = response.json().get('data', [])
-    if data:
-        return data[0]['name']
+    for template_name in os.listdir(TEMPLATES_DIR):
+        template_path = os.path.join(TEMPLATES_DIR, template_name)
+        template = cv2.imread(template_path, 0)
+        if template is None:
+            continue
+        res = cv2.matchTemplate(img_gray, template, cv2.TM_CCOEFF_NORMED)
+        if np.any(res >= 0.8):
+            return template_name.split('.')[0]
     return None
 
-def filtrar_lives_twitch(lives):
-    pragmatic_lives = []
-    for live in lives:
-        game_id = live.get('game_id')
-        if not game_id:
-            continue
-        game_name = buscar_game_name(game_id)
-        if game_name and game_name.lower() != GAME_NAME_TARGET.lower():
-            continue
-        streamer_name = live['user_name'].lower()
-        if streamer_name not in [s.lower() for s in STREAMERS_INTERESSE]:
-            continue
-        started_at = datetime.strptime(live['started_at'], "%Y-%m-%dT%H:%M:%SZ")
-        started_at = started_at.replace(tzinfo=pytz.utc).astimezone(pytz.timezone("America/Sao_Paulo"))
-        tempo_online = datetime.now(pytz.timezone("America/Sao_Paulo")) - started_at
-        pragmatic_lives.append({
-            'plataforma': 'Twitch (ao vivo)',
-            'streamer': live['user_name'],
-            'title': live['title'],
-            'viewer_count': live['viewer_count'],
-            'started_at': started_at.strftime('%Y-%m-%d %H:%M:%S'),
-            'tempo_online': str(tempo_online).split('.')[0],
-            'game': game_name,
-            'url': f"https://twitch.tv/{live['user_name']}"
-        })
-    return pragmatic_lives
+# ------------------------------
+# CAPTURA DE FRAME COM IMAGEIO_FFMPEG
+# ------------------------------
+def get_stream_m3u8_url(user_login):
+    return f"https://usher.ttvnw.net/api/channel/hls/{user_login}.m3u8"
 
-def buscar_vods_twitch_por_periodo(data_inicio, data_fim):
-    vods = []
+def capturar_frame_ffmpeg_imageio(m3u8_url, output_path="frame.jpg"):
+    try:
+        # cria o pipe ffmpeg e lê um frame como imagem bruta
+        width, height = 640, 360
+        cmd = [
+            "-i", m3u8_url,
+            "-vf", f"scale={width}:{height}",
+            "-vframes", "1",
+            "-f", "image2pipe",
+            "-vcodec", "mjpeg",
+            "-"
+        ]
+        process = ffmpeg.get_ffmpeg_exe()
+        pipe = ffmpeg.read_frames(cmd, pix_fmt='rgb24', output_resolution=(width, height))
+        with open(output_path, "wb") as f:
+            f.write(pipe.read())
+        return output_path
+    except Exception as e:
+        return None
+
+def verificar_jogo_em_live(streamer):
+    m3u8_url = get_stream_m3u8_url(streamer)
+    temp_frame = f"{streamer}_frame.jpg"
+    if capturar_frame_ffmpeg_imageio(m3u8_url, temp_frame) and os.path.exists(temp_frame):
+        jogo = match_template_from_image(temp_frame)
+        os.remove(temp_frame)
+        return jogo
+    return None
+
+# ------------------------------
+# AGENDAMENTO AUTOMÁTICO
+# ------------------------------
+def rotina_agendada():
+    resultados = []
     for streamer in STREAMERS_INTERESSE:
-        user_response = requests.get(BASE_URL_TWITCH + f'users?login={streamer}', headers=HEADERS_TWITCH)
-        user_data = user_response.json().get('data', [])
-        if not user_data:
-            continue
-        user_id = user_data[0]['id']
-        params = {
-            'user_id': user_id,
-            'first': 100,
-            'type': 'archive'
-        }
-        vod_response = requests.get(BASE_URL_TWITCH + 'videos', headers=HEADERS_TWITCH, params=params)
-        vod_data = vod_response.json().get('data', [])
-        for video in vod_data:
-            created_at = datetime.strptime(video['created_at'], "%Y-%m-%dT%H:%M:%SZ")
-            if not (data_inicio <= created_at <= data_fim):
-                continue
-            duration = video.get('duration', '')
-            vods.append({
-                'plataforma': 'Twitch (VOD)',
-                'streamer': video['user_name'],
-                'title': video['title'],
-                'viewer_count': video.get('view_count', 0),
-                'started_at': created_at.strftime('%Y-%m-%d %H:%M:%S'),
-                'tempo_online': duration,
-                'game': video.get('game_name', 'Desconhecido'),
-                'url': video['url']
+        jogo = verificar_jogo_em_live(streamer)
+        if jogo:
+            resultados.append({
+                "streamer": streamer,
+                "jogo_detectado": jogo,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             })
-    return vods
+    st.session_state['dados_lives'] = resultados
+
+def iniciar_agendamento():
+    schedule.every(10).minutes.do(rotina_agendada)
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
+
+agendador = threading.Thread(target=iniciar_agendamento, daemon=True)
+agendador.start()
 
 # ------------------------------
-# YOUTUBE
+# INTERFACE STREAMLIT
 # ------------------------------
-def buscar_youtube_videos_por_periodo(data_inicio, data_fim):
-    videos = []
-    published_after = data_inicio.isoformat("T") + "Z"
-    published_before = data_fim.isoformat("T") + "Z"
-    for streamer in STREAMERS_INTERESSE:
-        search_params = {
-            'part': 'snippet',
-            'channelType': 'any',
-            'q': streamer,
-            'type': 'video',
-            'publishedAfter': published_after,
-            'publishedBefore': published_before,
-            'regionCode': 'BR',
-            'relevanceLanguage': 'pt',
-            'key': YOUTUBE_API_KEY,
-            'maxResults': 10
-        }
-        search_response = requests.get(YOUTUBE_SEARCH_URL, params=search_params)
-        search_data = search_response.json()
-        video_ids = [item['id']['videoId'] for item in search_data.get('items', [])]
+st.set_page_config(page_title="Monitor Cassino PP - Detecção ao vivo", layout="wide")
+st.title("🎰 Monitor de Jogos da Pragmatic Play - Detecção por Imagem em Lives")
 
-        if not video_ids:
-            continue
+if st.button("🔍 Verificar lives agora"):
+    rotina_agendada()
 
-        stats_params = {
-            'part': 'snippet,statistics',
-            'id': ','.join(video_ids),
-            'key': YOUTUBE_API_KEY
-        }
-        stats_response = requests.get(YOUTUBE_VIDEO_URL, params=stats_params)
-        stats_data = stats_response.json()
-
-        for item in stats_data.get('items', []):
-            snippet = item['snippet']
-            stats = item['statistics']
-            videos.append({
-                'plataforma': 'YouTube',
-                'streamer': snippet['channelTitle'],
-                'title': snippet['title'],
-                'viewer_count': stats.get('viewCount', 0),
-                'started_at': snippet['publishedAt'].replace("T", " ").replace("Z", ""),
-                'tempo_online': '-',
-                'game': 'Cassino (palavra-chave)',
-                'url': f"https://www.youtube.com/watch?v={item['id']}"
-            })
-    return videos
-
-# ------------------------------
-# STREAMLIT DASHBOARD
-# ------------------------------
-st.set_page_config(page_title="Monitor Cassino PP - Twitch & YouTube", layout="wide")
-
-st.sidebar.subheader("➕ Adicionar novo streamer")
-nome_novo_streamer = st.sidebar.text_input("Nome do streamer")
-if st.sidebar.button("Adicionar streamer"):
-    adicionar_streamer(nome_novo_streamer)
-    st.sidebar.success(f"'{nome_novo_streamer}' adicionado. Recarregue a página para atualizar.")
-
-st.subheader("📅 Escolha o período para busca de VODs")
-data_inicio = st.date_input("Data de início", value=datetime.today() - timedelta(days=30))
-data_fim = st.date_input("Data de fim", value=datetime.today())
-
-streamers_selecionados = st.text_input("Filtrar por streamer (separar por vírgula)")
-
-if st.button("📥 Buscar conteúdo Cassino"):
-    dt_inicio = datetime.combine(data_inicio, datetime.min.time())
-    dt_fim = datetime.combine(data_fim, datetime.max.time())
-
-    twitch_lives = buscar_lives_twitch()
-    twitch_cassino = filtrar_lives_twitch(twitch_lives)
-    twitch_vods = buscar_vods_twitch_por_periodo(dt_inicio, dt_fim)
-    youtube_videos = buscar_youtube_videos_por_periodo(dt_inicio, dt_fim)
-    todos = twitch_cassino + twitch_vods + youtube_videos
-
-    if streamers_selecionados.strip():
-        filtro = [s.strip().lower() for s in streamers_selecionados.split(",") if s.strip()]
-        todos = [d for d in todos if d['streamer'].lower() in filtro]
-
-    if todos:
-        st.subheader(f"🎞️ Conteúdo de Cassino de {data_inicio.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')}")
-        df = pd.DataFrame(todos)
-        st.dataframe(df.sort_values(by="started_at", ascending=False), use_container_width=True)
-
-        if st.download_button("📁 Exportar para CSV", data=df.to_csv(index=False).encode('utf-8'), file_name="conteudo_cassino.csv", mime="text/csv"):
-            st.success("Arquivo CSV exportado com sucesso!")
-    else:
-        st.info("Nenhum conteúdo encontrado para os streamers selecionados no período definido.")
+if 'dados_lives' in st.session_state and st.session_state['dados_lives']:
+    df = pd.DataFrame(st.session_state['dados_lives'])
+    st.dataframe(df, use_container_width=True)
+    st.download_button("📁 Exportar CSV", data=df.to_csv(index=False).encode('utf-8'), file_name="detecao_pragmatic.csv", mime="text/csv")
+else:
+    st.info("Nenhuma detecção encontrada nas lives neste momento.")
