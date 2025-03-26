@@ -194,7 +194,7 @@ def varrer_vods_com_template(data_inicio, data_fim):
 # INTERFACE STREAMLIT
 # ------------------------------
 st.set_page_config(page_title="Monitor Cassino PP - Detecção", layout="wide")
-st.title("🌀 Monitor de Jogos - Detecção por Imagem")
+st.title("🌀 Monitor Cassino PP")
 
 st.sidebar.subheader("🎯 Filtros")
 streamers_input = st.sidebar.text_input("Streamers (separados por vírgula)")
