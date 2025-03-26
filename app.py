@@ -166,6 +166,7 @@ def rotina_agendada():
             })
     st.session_state['dados_lives'] = resultados
 
+
 def iniciar_agendamento():
     schedule.every(10).minutes.do(rotina_agendada)
     while True:
@@ -188,22 +189,26 @@ data_fim = st.sidebar.date_input("Data de fim", value=datetime.today())
 
 streamers_filtrados = [s.strip().lower() for s in streamers_input.split(",") if s.strip()] if streamers_input else []
 
-if st.button("🔍 Verificar lives agora"):
-    rotina_agendada()
+col1, col2, col3 = st.columns(3)
+with col1:
+    if st.button("🔍 Verificar lives agora"):
+        rotina_agendada()
 
-if st.button("📺 Verificar VODs no período"):
-    dt_inicio = datetime.combine(data_inicio, datetime.min.time())
-    dt_fim = datetime.combine(data_fim, datetime.max.time())
-    vod_resultados = buscar_vods_twitch_por_periodo(dt_inicio, dt_fim)
-    if vod_resultados:
-        st.session_state['dados_vods'] = vod_resultados
+with col2:
+    if st.button("📺 Verificar VODs no período"):
+        dt_inicio = datetime.combine(data_inicio, datetime.min.time())
+        dt_fim = datetime.combine(data_fim, datetime.max.time())
+        vod_resultados = buscar_vods_twitch_por_periodo(dt_inicio, dt_fim)
+        if vod_resultados:
+            st.session_state['dados_vods'] = vod_resultados
 
-if st.button("📂 Exibir todos os VODs (sem filtro por imagem)"):
-    dt_inicio = datetime.combine(data_inicio, datetime.min.time())
-    dt_fim = datetime.combine(data_fim, datetime.max.time())
-    todos_vods = buscar_todos_vods_por_periodo(dt_inicio, dt_fim)
-    if todos_vods:
-        st.session_state['todos_vods'] = todos_vods
+with col3:
+    if st.button("📂 Exibir todos os VODs (sem filtro por imagem)"):
+        dt_inicio = datetime.combine(data_inicio, datetime.min.time())
+        dt_fim = datetime.combine(data_fim, datetime.max.time())
+        todos_vods = buscar_todos_vods_por_periodo(dt_inicio, dt_fim)
+        if todos_vods:
+            st.session_state['todos_vods'] = todos_vods
 
 # Mostrar resultados
 if 'dados_lives' in st.session_state and st.session_state['dados_lives']:
