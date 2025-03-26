@@ -12,6 +12,7 @@ import imageio_ffmpeg as ffmpeg
 import threading
 import schedule
 import time
+import subprocess
 
 # ------------------------------
 # CONFIGURAÇÕES INICIAIS
@@ -71,29 +72,58 @@ def capturar_frame_ffmpeg_imageio(m3u8_url, output_path="frame.jpg"):
     try:
         width, height = 640, 360
         cmd = [
+            "ffmpeg",
+            "-y",
             "-i", m3u8_url,
             "-vf", f"scale={width}:{height}",
-            "-vframes", "1",
-            "-f", "image2pipe",
-            "-vcodec", "mjpeg",
-            "-"
+            "-frames:v", "1",
+            "-q:v", "2",
+            output_path
         ]
-        process = ffmpeg.get_ffmpeg_exe()
-        pipe = ffmpeg.read_frames(cmd, pix_fmt='rgb24', output_resolution=(width, height))
-        with open(output_path, "wb") as f:
-            f.write(pipe.read())
-        return output_path
-    except Exception as e:
+        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15)
+        return output_path if os.path.exists(output_path) else None
+    except Exception:
         return None
 
 def verificar_jogo_em_live(streamer):
     m3u8_url = get_stream_m3u8_url(streamer)
     temp_frame = f"{streamer}_frame.jpg"
-    if capturar_frame_ffmpeg_imageio(m3u8_url, temp_frame) and os.path.exists(temp_frame):
+    if capturar_frame_ffmpeg_imageio(m3u8_url, temp_frame):
         jogo = match_template_from_image(temp_frame)
         os.remove(temp_frame)
         return jogo
     return None
+
+# ------------------------------
+# ANÁLISE DE VODs
+# ------------------------------
+def buscar_vods_twitch_por_periodo(data_inicio, data_fim):
+    resultados = []
+    for streamer in STREAMERS_INTERESSE:
+        user_response = requests.get(BASE_URL_TWITCH + f'users?login={streamer}', headers=HEADERS_TWITCH)
+        user_data = user_response.json().get('data', [])
+        if not user_data:
+            continue
+        user_id = user_data[0]['id']
+        vod_response = requests.get(BASE_URL_TWITCH + f'videos?user_id={user_id}&type=archive&first=10', headers=HEADERS_TWITCH)
+        vods = vod_response.json().get('data', [])
+        for vod in vods:
+            created_at = datetime.strptime(vod['created_at'], "%Y-%m-%dT%H:%M:%SZ")
+            if not (data_inicio <= created_at <= data_fim):
+                continue
+            m3u8_url = f"https://vod-secure.twitch.tv/{vod['thumbnail_url'].split('%')[0].split('/')[-1]}.m3u8"
+            temp_frame = f"vod_{vod['id']}_frame.jpg"
+            if capturar_frame_ffmpeg_imageio(m3u8_url, temp_frame):
+                jogo = match_template_from_image(temp_frame)
+                os.remove(temp_frame)
+                if jogo:
+                    resultados.append({
+                        "streamer": streamer,
+                        "jogo_detectado": jogo,
+                        "timestamp": created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                        "fonte": "Twitch VOD"
+                    })
+    return resultados
 
 # ------------------------------
 # AGENDAMENTO AUTOMÁTICO
@@ -106,7 +136,8 @@ def rotina_agendada():
             resultados.append({
                 "streamer": streamer,
                 "jogo_detectado": jogo,
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "fonte": "Live"
             })
     st.session_state['dados_lives'] = resultados
 
@@ -123,21 +154,41 @@ agendador.start()
 # INTERFACE STREAMLIT
 # ------------------------------
 st.set_page_config(page_title="Monitor Cassino PP - Detecção ao vivo", layout="wide")
-st.title("🎰 Monitor de Jogos da Pragmatic Play - Detecção por Imagem em Lives")
+st.title("🎰 Monitor de Jogos da Pragmatic Play - Detecção por Imagem")
 
 st.sidebar.subheader("🎯 Filtrar por streamer")
 streamers_input = st.sidebar.text_input("Digite os nomes separados por vírgula", "")
+data_inicio = st.sidebar.date_input("Data de início", value=datetime.today() - timedelta(days=7))
+data_fim = st.sidebar.date_input("Data de fim", value=datetime.today())
 
 streamers_filtrados = [s.strip().lower() for s in streamers_input.split(",") if s.strip()] if streamers_input else []
 
 if st.button("🔍 Verificar lives agora"):
     rotina_agendada()
 
+if st.button("📺 Verificar VODs no período"):
+    dt_inicio = datetime.combine(data_inicio, datetime.min.time())
+    dt_fim = datetime.combine(data_fim, datetime.max.time())
+    vod_resultados = buscar_vods_twitch_por_periodo(dt_inicio, dt_fim)
+    if vod_resultados:
+        st.session_state['dados_vods'] = vod_resultados
+
+# Mostrar resultados
 if 'dados_lives' in st.session_state and st.session_state['dados_lives']:
     df = pd.DataFrame(st.session_state['dados_lives'])
     if streamers_filtrados:
         df = df[df['streamer'].str.lower().isin(streamers_filtrados)]
+    st.subheader("📡 Detecções em Lives Ao Vivo")
     st.dataframe(df, use_container_width=True)
-    st.download_button("📁 Exportar CSV", data=df.to_csv(index=False).encode('utf-8'), file_name="detecao_pragmatic.csv", mime="text/csv")
-else:
-    st.info("Nenhuma detecção encontrada nas lives neste momento.")
+    st.download_button("📁 Exportar CSV - Lives", data=df.to_csv(index=False).encode('utf-8'), file_name="detecao_lives.csv", mime="text/csv")
+
+if 'dados_vods' in st.session_state and st.session_state['dados_vods']:
+    df_vod = pd.DataFrame(st.session_state['dados_vods'])
+    if streamers_filtrados:
+        df_vod = df_vod[df_vod['streamer'].str.lower().isin(streamers_filtrados)]
+    st.subheader("📼 Detecções em VODs")
+    st.dataframe(df_vod, use_container_width=True)
+    st.download_button("📁 Exportar CSV - VODs", data=df_vod.to_csv(index=False).encode('utf-8'), file_name="detecao_vods.csv", mime="text/csv")
+
+if not st.session_state.get('dados_lives') and not st.session_state.get('dados_vods'):
+    st.info("Nenhuma detecção encontrada nas lives ou VODs.")
