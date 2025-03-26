@@ -182,7 +182,6 @@ def buscar_vods_twitch_por_periodo(data_inicio, data_fim):
                     "fonte": "Live",
                     "categoria": categoria
                 })
-                    "jogo_detectado": jogo,
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "fonte": "Live",
                     "categoria": categoria
