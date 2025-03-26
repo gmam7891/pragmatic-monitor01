@@ -99,13 +99,6 @@ def verificar_jogo_em_live(streamer):
         user_data = user_response.json().get('data', [])
         if not user_data:
             return None
-
-        user_id = user_data[0]['id']
-        stream_response = requests.get(BASE_URL_TWITCH + f'streams?user_id={user_id}', headers=HEADERS_TWITCH)
-        stream_data = stream_response.json().get('data', [])
-        if not stream_data:
-            return None
-
         game_id = stream_data[0].get('game_id')
         game_name = ""
 
@@ -114,6 +107,7 @@ def verificar_jogo_em_live(streamer):
             game_data = game_response.json().get("data", [])
             game_name = game_data[0]['name'] if game_data else "Desconhecida"
 
+        # Filtragem por modo
         if modo_operacao == "2 - Live + Categoria" or modo_operacao == "4 - Live + Categoria + Imagem":
             if game_name.lower() != categoria_filtro.strip().lower():
                 return None
@@ -133,6 +127,24 @@ def verificar_jogo_em_live(streamer):
 
     except Exception as e:
         print(f"Erro ao verificar live de {streamer}: {e}")
+    return None
+        game_id = stream_data[0].get('game_id')
+        if not game_id:
+            return None
+        game_response = requests.get(BASE_URL_TWITCH + f'games?id={game_id}', headers=HEADERS_TWITCH)
+        game_data = game_response.json().get("data", [])
+        if not game_data or game_data[0]['name'].lower() != categoria_filtro.strip().lower():
+            return None
+
+        m3u8_url = get_stream_m3u8_url(streamer)
+        temp_frame = f"{streamer}_frame.jpg"
+        if capturar_frame_ffmpeg_imageio(m3u8_url, temp_frame):
+            jogo = match_template_from_image(temp_frame)
+            os.remove(temp_frame)
+            return jogo, game_data[0]['name'] if game_data else "Desconhecida"
+    except Exception as e:
+        print(f"Erro ao verificar live de {streamer}: {e}")
+    return None
     return None
 
 def buscar_vods_twitch_por_periodo(data_inicio, data_fim):
@@ -176,27 +188,13 @@ def buscar_vods_twitch_por_periodo(data_inicio, data_fim):
                     jogo = "-"
 
                 resultados.append({
-                    "streamer": streamer,
-                    "jogo_detectado": jogo,
-                    "timestamp": created_at.strftime("%Y-%m-%d %H:%M:%S"),
-                    "fonte": "Twitch VOD",
-                    "categoria": game_name,
-                    "url": vod['url']
-                })
-        except Exception as e:
-            print(f"Erro ao buscar VODs: {e}")
-    return resultados
-
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    if st.button("🔍 Verificar lives agora"):
-        resultados = []
-        for streamer in STREAMERS_INTERESSE:
-            resultado_live = verificar_jogo_em_live(streamer)
-            if resultado_live:
-                jogo, categoria = resultado_live
-                resultados.append({
+                "streamer": streamer,
+                "jogo_detectado": jogo,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "fonte": "Live",
+                "categoria": categoria
+            })
+            # Removido append duplicado
                     "streamer": streamer,
                     "jogo_detectado": jogo,
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -206,6 +204,14 @@ with col1:
         st.session_state['dados_lives'] = resultados
 
 with col2:
+    if st.button("📺 Verificar VODs no período"):
+        dt_inicio = datetime.combine(data_inicio, datetime.min.time())
+        dt_fim = datetime.combine(data_fim, datetime.max.time())
+        vod_resultados = buscar_vods_twitch_por_periodo(dt_inicio, dt_fim)
+        if vod_resultados:
+            st.session_state['dados_vods'] = vod_resultados
+
+with col3:
     if st.button("🌐 Rodar varredura na URL personalizada") and url_custom:
         resultado_url = varrer_url_customizada(url_custom)
         if resultado_url:
