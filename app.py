@@ -187,15 +187,25 @@ def buscar_vods_twitch_por_periodo(data_inicio, data_fim):
             print(f"Erro ao buscar VODs: {e}")
     return resultados
 
-with col2:
-    if st.button("📺 Verificar VODs no período"):
-        dt_inicio = datetime.combine(data_inicio, datetime.min.time())
-        dt_fim = datetime.combine(data_fim, datetime.max.time())
-        vod_resultados = buscar_vods_twitch_por_periodo(dt_inicio, dt_fim)
-        if vod_resultados:
-            st.session_state['dados_vods'] = vod_resultados
+col1, col2, col3 = st.columns(3)
 
-with col3:
+with col1:
+    if st.button("🔍 Verificar lives agora"):
+        resultados = []
+        for streamer in STREAMERS_INTERESSE:
+            resultado_live = verificar_jogo_em_live(streamer)
+            if resultado_live:
+                jogo, categoria = resultado_live
+                resultados.append({
+                    "streamer": streamer,
+                    "jogo_detectado": jogo,
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "fonte": "Live",
+                    "categoria": categoria
+                })
+        st.session_state['dados_lives'] = resultados
+
+with col2:
     if st.button("🌐 Rodar varredura na URL personalizada") and url_custom:
         resultado_url = varrer_url_customizada(url_custom)
         if resultado_url:
