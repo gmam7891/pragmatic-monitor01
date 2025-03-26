@@ -183,7 +183,9 @@ def buscar_vods_twitch_por_periodo(data_inicio, data_fim):
                     "categoria": game_name,
                     "url": vod['url']
                 })
-        st.session_state['dados_lives'] = resultados
+        except Exception as e:
+            print(f"Erro ao buscar VODs: {e}")
+    return resultados
 
 with col2:
     if st.button("📺 Verificar VODs no período"):
