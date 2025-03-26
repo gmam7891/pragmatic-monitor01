@@ -179,14 +179,16 @@ with col3:
 
 if 'dados_lives' in st.session_state:
     df = pd.DataFrame(st.session_state['dados_lives'])
-    if streamers_filtrados:
+    if streamers_filtrados and 'streamer' in df.columns:
+        df = df[df['streamer'].str.lower().isin(streamers_filtrados)]
         df = df[df['streamer'].str.lower().isin(streamers_filtrados)]
     st.subheader("📡 Detecções em Lives")
     st.dataframe(df, use_container_width=True)
 
 if 'dados_vods' in st.session_state:
     df = pd.DataFrame(st.session_state['dados_vods'])
-    if streamers_filtrados:
+    if streamers_filtrados and 'streamer' in df.columns:
+        df = df[df['streamer'].str.lower().isin(streamers_filtrados)]
         df = df[df['streamer'].str.lower().isin(streamers_filtrados)]
     st.subheader("📼 Detecções em VODs")
     st.dataframe(df, use_container_width=True)
