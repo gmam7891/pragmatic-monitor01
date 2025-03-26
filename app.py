@@ -95,11 +95,44 @@ def varrer_url_customizada(url):
 
 def verificar_jogo_em_live(streamer):
     try:
-        # Verifica categoria antes da detecção por imagem
         user_response = requests.get(BASE_URL_TWITCH + f'users?login={streamer}', headers=HEADERS_TWITCH)
         user_data = user_response.json().get('data', [])
         if not user_data:
             return None
+        user_id = user_data[0]['id']
+        stream_response = requests.get(BASE_URL_TWITCH + f'streams?user_id={user_id}', headers=HEADERS_TWITCH)
+        stream_data = stream_response.json().get('data', [])
+        if not stream_data:
+            return None
+        game_id = stream_data[0].get('game_id')
+        game_name = ""
+
+        if game_id:
+            game_response = requests.get(BASE_URL_TWITCH + f'games?id={game_id}', headers=HEADERS_TWITCH)
+            game_data = game_response.json().get("data", [])
+            game_name = game_data[0]['name'] if game_data else "Desconhecida"
+
+        # Filtragem por modo
+        if modo_operacao == "2 - Live + Categoria" or modo_operacao == "4 - Live + Categoria + Imagem":
+            if game_name.lower() != categoria_filtro.strip().lower():
+                return None
+
+        if modo_operacao == "3 - Live + Imagem" or modo_operacao == "4 - Live + Categoria + Imagem":
+            m3u8_url = get_stream_m3u8_url(streamer)
+            temp_frame = f"{streamer}_frame.jpg"
+            if capturar_frame_ffmpeg_imageio(m3u8_url, temp_frame):
+                jogo = match_template_from_image(temp_frame)
+                os.remove(temp_frame)
+                if jogo:
+                    return jogo, game_name
+                else:
+                    return None
+        else:
+            return "-", game_name
+
+    except Exception as e:
+        print(f"Erro ao verificar live de {streamer}: {e}")
+    return None
         user_id = user_data[0]['id']
         stream_response = requests.get(BASE_URL_TWITCH + f'streams?user_id={user_id}', headers=HEADERS_TWITCH)
         stream_data = stream_response.json().get('data', [])
@@ -134,28 +167,42 @@ def buscar_vods_twitch_por_periodo(data_inicio, data_fim):
                 continue
             user_id = user_data[0]['id']
             vod_response = requests.get(BASE_URL_TWITCH + f'videos?user_id={user_id}&type=archive&first=20', headers=HEADERS_TWITCH)
-            
+            vods = vod_response.json().get('data', [])
             for vod in vods:
                 created_at = datetime.strptime(vod['created_at'], "%Y-%m-%dT%H:%M:%SZ")
                 if not (data_inicio <= created_at <= data_fim):
                     continue
-                # Verifica se a categoria é Cassino Virtual
-                game_id = vod.get("game_id")
-                if game_id:
-                    game_response = requests.get(BASE_URL_TWITCH + f'games?id={game_id}', headers=HEADERS_TWITCH)
-                    game_data = game_response.json().get("data", [])
-                    if game_data and game_data[0]['name'].lower() != categoria_filtro.strip().lower():
+                game_name = ""
+                if modo_vod in ["2 - VOD + Categoria", "4 - VOD + Categoria + Imagem"]:
+                    game_id = vod.get("game_id")
+                    if game_id:
+                        game_response = requests.get(BASE_URL_TWITCH + f'games?id={game_id}', headers=HEADERS_TWITCH)
+                        game_data = game_response.json().get("data", [])
+                        game_name = game_data[0]['name'] if game_data else "Desconhecida"
+                        if game_name.lower() != categoria_filtro.strip().lower():
+                            continue
+                else:
+                    game_name = "-"
+
+                if modo_vod in ["3 - VOD + Imagem", "4 - VOD + Categoria + Imagem"]:
+                    m3u8_url = f"https://vod-secure.twitch.tv/{vod['thumbnail_url'].split('%')[0].split('/')[-1]}.m3u8"
+                    temp_frame = f"vod_{vod['id']}_frame.jpg"
+                    if capturar_frame_ffmpeg_imageio(m3u8_url, temp_frame):
+                        jogo = match_template_from_image(temp_frame)
+                        os.remove(temp_frame)
+                        if not jogo:
+                            continue
+                    else:
                         continue
-            for vod in vods:
-                created_at = datetime.strptime(vod['created_at'], "%Y-%m-%dT%H:%M:%SZ")
-                if not (data_inicio <= created_at <= data_fim):
-                    continue
+                else:
+                    jogo = "-"
+
                 resultados.append({
                     "streamer": streamer,
-                    "jogo_detectado": "-",
+                    "jogo_detectado": jogo,
                     "timestamp": created_at.strftime("%Y-%m-%d %H:%M:%S"),
                     "fonte": "Twitch VOD",
-                    "categoria": game_data[0]['name'] if game_data else "Desconhecida",
+                    "categoria": game_name,
                     "url": vod['url']
                 })
         except Exception as e:
@@ -169,6 +216,18 @@ st.set_page_config(page_title="Monitor Cassino PP - Detecção", layout="wide")
 st.title("🎰 Monitor de Jogos - Detecção por Imagem")
 
 st.sidebar.subheader("🎯 Filtros")
+modo_operacao = st.sidebar.selectbox("Modo de Varredura", [
+    "1 - Apenas Live",
+    "2 - Live + Categoria",
+    "3 - Live + Imagem",
+    "4 - Live + Categoria + Imagem"
+])
+modo_vod = st.sidebar.selectbox("Modo de Varredura VOD", [
+    "1 - Apenas VOD",
+    "2 - VOD + Categoria",
+    "3 - VOD + Imagem",
+    "4 - VOD + Categoria + Imagem"
+])
 categoria_filtro = st.sidebar.text_input("Categoria (ex: Virtual Casino)", value="Virtual Casino")
 streamers_input = st.sidebar.text_input("Streamers (separados por vírgula)")
 data_inicio = st.sidebar.date_input("Data de início", value=datetime.today() - timedelta(days=7))
@@ -224,6 +283,7 @@ if 'dados_lives' in st.session_state:
     for col in ['categoria']:
         if col in df.columns:
             df[col] = df[col].apply(lambda x: f"🎯 {x}")
+    df["modo"] = modo_operacao if 'Live' in df["fonte"].iloc[0] else modo_vod
     st.dataframe(df, use_container_width=True)
 
 if 'dados_vods' in st.session_state:
