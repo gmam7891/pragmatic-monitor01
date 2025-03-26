@@ -169,7 +169,11 @@ st.set_page_config(page_title="Monitor Cassino PP - Detecção", layout="wide")
 st.title("🎰 Monitor de Jogos - Detecção por Imagem")
 
 st.sidebar.subheader("🎯 Filtros")
-categoria_filtro = st.sidebar.text_input("Categoria (ex: Virtual Casino)", value="Virtual Casino", "Sem Categoria")
+categoria_filtro = st.sidebar.selectbox(
+    "Categoria",
+    options=["Virtual Casino", "Sem Categoria"],
+    index=0
+)
 streamers_input = st.sidebar.text_input("Streamers (separados por vírgula)")
 data_inicio = st.sidebar.date_input("Data de início", value=datetime.today() - timedelta(days=7))
 data_fim = st.sidebar.date_input("Data de fim", value=datetime.today())
