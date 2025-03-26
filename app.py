@@ -46,6 +46,7 @@ def adicionar_streamer(novo):
 
 STREAMERS_INTERESSE = carregar_streamers()
 
+
 def carregar_jogos_pragmatic():
     if not os.path.exists(JOGOS_FILE):
         with open(JOGOS_FILE, "w", encoding="utf-8") as f:
@@ -54,6 +55,7 @@ def carregar_jogos_pragmatic():
         return [linha.strip().lower() for linha in f if linha.strip()]
 
 JOGOS_PRAGMATIC = carregar_jogos_pragmatic()
+
 
 def match_template_from_frame(frame_url):
     try:
@@ -69,10 +71,10 @@ def match_template_from_frame(frame_url):
                 continue
             res = cv2.matchTemplate(img_gray, template, cv2.TM_CCOEFF_NORMED)
             if np.any(res >= 0.8):
-                return True
+                return template_name.split('.')[0]  # nome do jogo detectado
     except:
-        return False
-    return False
+        return None
+    return None
 
 # ------------------------------
 # TWITCH
@@ -100,7 +102,8 @@ def filtrar_lives_twitch(lives):
             continue
 
         thumbnail_url = live['thumbnail_url'].replace('{width}', '1920').replace('{height}', '1080')
-        if not match_template_from_frame(thumbnail_url):
+        jogo_detectado = match_template_from_frame(thumbnail_url)
+        if not jogo_detectado:
             continue
 
         game_name = buscar_game_name(game_id)
@@ -114,6 +117,7 @@ def filtrar_lives_twitch(lives):
             'viewer_count': live['viewer_count'],
             'started_at': started_at.strftime('%Y-%m-%d %H:%M:%S'),
             'tempo_online': str(tempo_online).split('.')[0],
+            'jogo_detectado': jogo_detectado,
             'game': game_name,
             'url': f"https://twitch.tv/{live['user_name']}"
         })
