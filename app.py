@@ -27,15 +27,9 @@ BASE_URL_TWITCH = 'https://api.twitch.tv/helix/'
 STREAMERS_FILE = "streamers.txt"
 TEMPLATES_DIR = "templates/"
 
-# ------------------------------
-# GARANTIR QUE A PASTA TEMPLATES EXISTA
-# ------------------------------
 if not os.path.exists(TEMPLATES_DIR):
     os.makedirs(TEMPLATES_DIR)
 
-# ------------------------------
-# UTILITÁRIOS
-# ------------------------------
 def carregar_streamers():
     if not os.path.exists(STREAMERS_FILE):
         with open(STREAMERS_FILE, "w", encoding="utf-8") as f:
@@ -45,9 +39,6 @@ def carregar_streamers():
 
 STREAMERS_INTERESSE = carregar_streamers()
 
-# ------------------------------
-# TEMPLATE MATCHING
-# ------------------------------
 def match_template_from_image(image_path):
     try:
         img = cv2.imread(image_path)
@@ -64,9 +55,6 @@ def match_template_from_image(image_path):
         print(f"Erro no template matching: {e}")
     return None
 
-# ------------------------------
-# CAPTURA DE FRAME COM FFMPEG
-# ------------------------------
 def get_stream_m3u8_url(user_login):
     return f"https://usher.ttvnw.net/api/channel/hls/{user_login}.m3u8"
 
@@ -88,10 +76,9 @@ def capturar_frame_ffmpeg_imageio(m3u8_url, output_path="frame.jpg"):
         print(f"Erro ao capturar frame: {e}")
         return None
 
-# Nova função para varredura de uma URL customizada com 24 FPS
 def varrer_url_customizada(url):
     resultados = []
-    for i in range(5):  # Captura 5 frames a 24 FPS (~0.04s entre frames)
+    for i in range(5):
         frame_path = f"custom_frame_{i}.jpg"
         if capturar_frame_ffmpeg_imageio(url, frame_path):
             jogo = match_template_from_image(frame_path)
@@ -106,9 +93,6 @@ def varrer_url_customizada(url):
         time.sleep(1/24)
     return resultados
 
-# ------------------------------
-# VERIFICAÇÃO DE LIVES
-# ------------------------------
 def verificar_jogo_em_live(streamer):
     m3u8_url = get_stream_m3u8_url(streamer)
     temp_frame = f"{streamer}_frame.jpg"
@@ -118,9 +102,6 @@ def verificar_jogo_em_live(streamer):
         return jogo
     return None
 
-# ------------------------------
-# ANÁLISE DE VODs
-# ------------------------------
 def buscar_vods_twitch_por_periodo(data_inicio, data_fim):
     resultados = []
     for streamer in STREAMERS_INTERESSE:
@@ -153,4 +134,67 @@ def buscar_vods_twitch_por_periodo(data_inicio, data_fim):
             print(f"Erro ao buscar VODs: {e}")
     return resultados
 
-# Continuação da lógica de exibição e outras funções... (mantida conforme necessidade)
+# ------------------------------
+# INTERFACE STREAMLIT
+# ------------------------------
+st.set_page_config(page_title="Monitor Cassino PP - Detecção", layout="wide")
+st.title("🎰 Monitor de Jogos - Detecção por Imagem")
+
+st.sidebar.subheader("🎯 Filtros")
+streamers_input = st.sidebar.text_input("Streamers (separados por vírgula)")
+data_inicio = st.sidebar.date_input("Data de início", value=datetime.today() - timedelta(days=7))
+data_fim = st.sidebar.date_input("Data de fim", value=datetime.today())
+url_custom = st.sidebar.text_input("URL .m3u8 personalizada")
+
+streamers_filtrados = [s.strip().lower() for s in streamers_input.split(",") if s.strip()] if streamers_input else []
+
+col1, col2, col3 = st.columns(3)
+with col1:
+    if st.button("🔍 Verificar lives agora"):
+        resultados = []
+        for streamer in STREAMERS_INTERESSE:
+            jogo = verificar_jogo_em_live(streamer)
+            if jogo:
+                resultados.append({
+                    "streamer": streamer,
+                    "jogo_detectado": jogo,
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "fonte": "Live"
+                })
+        st.session_state['dados_lives'] = resultados
+
+with col2:
+    if st.button("📺 Verificar VODs no período"):
+        dt_inicio = datetime.combine(data_inicio, datetime.min.time())
+        dt_fim = datetime.combine(data_fim, datetime.max.time())
+        vod_resultados = buscar_vods_twitch_por_periodo(dt_inicio, dt_fim)
+        if vod_resultados:
+            st.session_state['dados_vods'] = vod_resultados
+
+with col3:
+    if st.button("🌐 Rodar varredura na URL personalizada") and url_custom:
+        resultado_url = varrer_url_customizada(url_custom)
+        if resultado_url:
+            st.session_state['dados_url'] = resultado_url
+
+if 'dados_lives' in st.session_state:
+    df = pd.DataFrame(st.session_state['dados_lives'])
+    if streamers_filtrados:
+        df = df[df['streamer'].str.lower().isin(streamers_filtrados)]
+    st.subheader("📡 Detecções em Lives")
+    st.dataframe(df, use_container_width=True)
+
+if 'dados_vods' in st.session_state:
+    df = pd.DataFrame(st.session_state['dados_vods'])
+    if streamers_filtrados:
+        df = df[df['streamer'].str.lower().isin(streamers_filtrados)]
+    st.subheader("📼 Detecções em VODs")
+    st.dataframe(df, use_container_width=True)
+
+if 'dados_url' in st.session_state:
+    df = pd.DataFrame(st.session_state['dados_url'])
+    st.subheader("🌐 Detecção em URL personalizada")
+    st.dataframe(df, use_container_width=True)
+
+if not any(k in st.session_state for k in ['dados_lives', 'dados_vods', 'dados_url']):
+    st.info("Nenhuma detecção encontrada.")
