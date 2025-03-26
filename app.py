@@ -13,7 +13,6 @@ import threading
 import schedule
 import time
 import subprocess
-import re
 
 # ------------------------------
 # CONFIGURAÇÕES INICIAIS
@@ -99,39 +98,144 @@ def verificar_jogo_em_live(streamer):
     return None
 
 # ------------------------------
-# VERIFICAÇÃO POR URL COLADA
+# ANÁLISE DE VODs
 # ------------------------------
-def url_para_m3u8(url):
-    match_vod = re.search(r'twitch\\.tv/videos/(\\d+)', url)
-    if match_vod:
-        video_id = match_vod.group(1)
-        return f"https://vod-secure.twitch.tv/{video_id}/{video_id}.m3u8"
+def buscar_vods_twitch_por_periodo(data_inicio, data_fim):
+    resultados = []
+    for streamer in STREAMERS_INTERESSE:
+        user_response = requests.get(BASE_URL_TWITCH + f'users?login={streamer}', headers=HEADERS_TWITCH)
+        user_data = user_response.json().get('data', [])
+        if not user_data:
+            continue
+        user_id = user_data[0]['id']
+        vod_response = requests.get(BASE_URL_TWITCH + f'videos?user_id={user_id}&type=archive&first=10', headers=HEADERS_TWITCH)
+        vods = vod_response.json().get('data', [])
+        for vod in vods:
+            created_at = datetime.strptime(vod['created_at'], "%Y-%m-%dT%H:%M:%SZ")
+            if not (data_inicio <= created_at <= data_fim):
+                continue
+            m3u8_url = f"https://vod-secure.twitch.tv/{vod['thumbnail_url'].split('%')[0].split('/')[-1]}.m3u8"
+            temp_frame = f"vod_{vod['id']}_frame.jpg"
+            if capturar_frame_ffmpeg_imageio(m3u8_url, temp_frame):
+                jogo = match_template_from_image(temp_frame)
+                os.remove(temp_frame)
+                if jogo:
+                    resultados.append({
+                        "streamer": streamer,
+                        "jogo_detectado": jogo,
+                        "timestamp": created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                        "fonte": "Twitch VOD",
+                        "url": vod['url']
+                    })
+    return resultados
 
-    match_live = re.search(r'twitch\\.tv/([\\w\\d_]+)', url)
-    if match_live:
-        user_login = match_live.group(1)
-        return f"https://usher.ttvnw.net/api/channel/hls/{user_login}.m3u8"
-
-    return None
+def buscar_todos_vods_por_periodo(data_inicio, data_fim):
+    resultados = []
+    for streamer in STREAMERS_INTERESSE:
+        user_response = requests.get(BASE_URL_TWITCH + f'users?login={streamer}', headers=HEADERS_TWITCH)
+        user_data = user_response.json().get('data', [])
+        if not user_data:
+            continue
+        user_id = user_data[0]['id']
+        vod_response = requests.get(BASE_URL_TWITCH + f'videos?user_id={user_id}&type=archive&first=20', headers=HEADERS_TWITCH)
+        vods = vod_response.json().get('data', [])
+        for vod in vods:
+            created_at = datetime.strptime(vod['created_at'], "%Y-%m-%dT%H:%M:%SZ")
+            if not (data_inicio <= created_at <= data_fim):
+                continue
+            resultados.append({
+                "streamer": vod["user_name"],
+                "title": vod["title"],
+                "timestamp": created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                "jogo_detectado": "-",
+                "fonte": "VOD bruto",
+                "url": vod["url"]
+            })
+    return resultados
 
 # ------------------------------
-# INTERFACE STREAMLIT (EXTRA: VERIFICAR URL DIRETA)
+# AGENDAMENTO AUTOMÁTICO
 # ------------------------------
-st.sidebar.subheader("🔗 Verificar jogo via URL direta")
-url_direta = st.sidebar.text_input("Cole o link da Twitch (live ou VOD)")
-if st.sidebar.button("🚀 Verificar URL") and url_direta:
-    m3u8 = url_para_m3u8(url_direta)
-    if m3u8:
-        temp_path = "frame_url.jpg"
-        frame_ok = capturar_frame_ffmpeg_imageio(m3u8, temp_path)
-        if frame_ok:
-            jogo = match_template_from_image(temp_path)
-            os.remove(temp_path)
-            if jogo:
-                st.success(f"Jogo da Pragmatic detectado: {jogo}")
-            else:
-                st.warning("Nenhum jogo da Pragmatic foi detectado.")
-        else:
-            st.error("Erro ao capturar frame da URL fornecida.")
-    else:
-        st.error("URL inválida ou não reconhecida.")
+def rotina_agendada():
+    resultados = []
+    for streamer in STREAMERS_INTERESSE:
+        jogo = verificar_jogo_em_live(streamer)
+        if jogo:
+            resultados.append({
+                "streamer": streamer,
+                "jogo_detectado": jogo,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "fonte": "Live"
+            })
+    st.session_state['dados_lives'] = resultados
+
+def iniciar_agendamento():
+    schedule.every(10).minutes.do(rotina_agendada)
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
+
+agendador = threading.Thread(target=iniciar_agendamento, daemon=True)
+agendador.start()
+
+# ------------------------------
+# INTERFACE STREAMLIT
+# ------------------------------
+st.set_page_config(page_title="Monitor Cassino PP - Detecção ao vivo", layout="wide")
+st.title("🎰 Monitor de Jogos da Pragmatic Play - Detecção por Imagem")
+
+st.sidebar.subheader("🎯 Filtrar por streamer")
+streamers_input = st.sidebar.text_input("Digite os nomes separados por vírgula", "")
+data_inicio = st.sidebar.date_input("Data de início", value=datetime.today() - timedelta(days=7))
+data_fim = st.sidebar.date_input("Data de fim", value=datetime.today())
+
+streamers_filtrados = [s.strip().lower() for s in streamers_input.split(",") if s.strip()] if streamers_input else []
+
+col1, col2, col3 = st.columns(3)
+with col1:
+    if st.button("🔍 Verificar lives agora"):
+        rotina_agendada()
+
+with col2:
+    if st.button("📺 Verificar VODs no período"):
+        dt_inicio = datetime.combine(data_inicio, datetime.min.time())
+        dt_fim = datetime.combine(data_fim, datetime.max.time())
+        vod_resultados = buscar_vods_twitch_por_periodo(dt_inicio, dt_fim)
+        if vod_resultados:
+            st.session_state['dados_vods'] = vod_resultados
+
+with col3:
+    if st.button("📂 Exibir todos os VODs (sem filtro por imagem)"):
+        dt_inicio = datetime.combine(data_inicio, datetime.min.time())
+        dt_fim = datetime.combine(data_fim, datetime.max.time())
+        todos_vods = buscar_todos_vods_por_periodo(dt_inicio, dt_fim)
+        if todos_vods:
+            st.session_state['todos_vods'] = todos_vods
+
+# Mostrar resultados
+if 'dados_lives' in st.session_state and st.session_state['dados_lives']:
+    df = pd.DataFrame(st.session_state['dados_lives'])
+    if streamers_filtrados:
+        df = df[df['streamer'].str.lower().isin(streamers_filtrados)]
+    st.subheader("📡 Detecções em Lives Ao Vivo")
+    st.dataframe(df, use_container_width=True)
+    st.download_button("📁 Exportar CSV - Lives", data=df.to_csv(index=False).encode('utf-8'), file_name="detecao_lives.csv", mime="text/csv")
+
+if 'dados_vods' in st.session_state and st.session_state['dados_vods']:
+    df_vod = pd.DataFrame(st.session_state['dados_vods'])
+    if streamers_filtrados:
+        df_vod = df_vod[df_vod['streamer'].str.lower().isin(streamers_filtrados)]
+    st.subheader("📼 Detecções em VODs")
+    st.dataframe(df_vod, use_container_width=True)
+    st.download_button("📁 Exportar CSV - VODs", data=df_vod.to_csv(index=False).encode('utf-8'), file_name="detecao_vods.csv", mime="text/csv")
+
+if 'todos_vods' in st.session_state and st.session_state['todos_vods']:
+    df_todos = pd.DataFrame(st.session_state['todos_vods'])
+    if streamers_filtrados:
+        df_todos = df_todos[df_todos['streamer'].str.lower().isin(streamers_filtrados)]
+    st.subheader("📁 Todos os VODs (sem verificação de imagem)")
+    st.dataframe(df_todos, use_container_width=True)
+    st.download_button("📁 Exportar CSV - VODs brutos", data=df_todos.to_csv(index=False).encode('utf-8'), file_name="vods_brutos.csv", mime="text/csv")
+
+if not st.session_state.get('dados_lives') and not st.session_state.get('dados_vods') and not st.session_state.get('todos_vods'):
+    st.info("Nenhuma detecção encontrada nas lives ou VODs.")
