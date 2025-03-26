@@ -121,8 +121,33 @@ def buscar_vods_twitch_por_periodo(data_inicio, data_fim):
                         "streamer": streamer,
                         "jogo_detectado": jogo,
                         "timestamp": created_at.strftime("%Y-%m-%d %H:%M:%S"),
-                        "fonte": "Twitch VOD"
+                        "fonte": "Twitch VOD",
+                        "url": vod['url']
                     })
+    return resultados
+
+def buscar_todos_vods_por_periodo(data_inicio, data_fim):
+    resultados = []
+    for streamer in STREAMERS_INTERESSE:
+        user_response = requests.get(BASE_URL_TWITCH + f'users?login={streamer}', headers=HEADERS_TWITCH)
+        user_data = user_response.json().get('data', [])
+        if not user_data:
+            continue
+        user_id = user_data[0]['id']
+        vod_response = requests.get(BASE_URL_TWITCH + f'videos?user_id={user_id}&type=archive&first=20', headers=HEADERS_TWITCH)
+        vods = vod_response.json().get('data', [])
+        for vod in vods:
+            created_at = datetime.strptime(vod['created_at'], "%Y-%m-%dT%H:%M:%SZ")
+            if not (data_inicio <= created_at <= data_fim):
+                continue
+            resultados.append({
+                "streamer": vod["user_name"],
+                "title": vod["title"],
+                "timestamp": created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                "jogo_detectado": "-",
+                "fonte": "VOD bruto",
+                "url": vod["url"]
+            })
     return resultados
 
 # ------------------------------
@@ -173,6 +198,13 @@ if st.button("📺 Verificar VODs no período"):
     if vod_resultados:
         st.session_state['dados_vods'] = vod_resultados
 
+if st.button("📂 Exibir todos os VODs (sem filtro por imagem)"):
+    dt_inicio = datetime.combine(data_inicio, datetime.min.time())
+    dt_fim = datetime.combine(data_fim, datetime.max.time())
+    todos_vods = buscar_todos_vods_por_periodo(dt_inicio, dt_fim)
+    if todos_vods:
+        st.session_state['todos_vods'] = todos_vods
+
 # Mostrar resultados
 if 'dados_lives' in st.session_state and st.session_state['dados_lives']:
     df = pd.DataFrame(st.session_state['dados_lives'])
@@ -190,5 +222,13 @@ if 'dados_vods' in st.session_state and st.session_state['dados_vods']:
     st.dataframe(df_vod, use_container_width=True)
     st.download_button("📁 Exportar CSV - VODs", data=df_vod.to_csv(index=False).encode('utf-8'), file_name="detecao_vods.csv", mime="text/csv")
 
-if not st.session_state.get('dados_lives') and not st.session_state.get('dados_vods'):
+if 'todos_vods' in st.session_state and st.session_state['todos_vods']:
+    df_todos = pd.DataFrame(st.session_state['todos_vods'])
+    if streamers_filtrados:
+        df_todos = df_todos[df_todos['streamer'].str.lower().isin(streamers_filtrados)]
+    st.subheader("📁 Todos os VODs (sem verificação de imagem)")
+    st.dataframe(df_todos, use_container_width=True)
+    st.download_button("📁 Exportar CSV - VODs brutos", data=df_todos.to_csv(index=False).encode('utf-8'), file_name="vods_brutos.csv", mime="text/csv")
+
+if not st.session_state.get('dados_lives') and not st.session_state.get('dados_vods') and not st.session_state.get('todos_vods'):
     st.info("Nenhuma detecção encontrada nas lives ou VODs.")
