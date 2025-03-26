@@ -99,6 +99,13 @@ def verificar_jogo_em_live(streamer):
         user_data = user_response.json().get('data', [])
         if not user_data:
             return None
+
+        user_id = user_data[0]['id']
+        stream_response = requests.get(BASE_URL_TWITCH + f'streams?user_id={user_id}', headers=HEADERS_TWITCH)
+        stream_data = stream_response.json().get('data', [])
+        if not stream_data:
+            return None
+
         game_id = stream_data[0].get('game_id')
         game_name = ""
 
@@ -107,7 +114,6 @@ def verificar_jogo_em_live(streamer):
             game_data = game_response.json().get("data", [])
             game_name = game_data[0]['name'] if game_data else "Desconhecida"
 
-        # Filtragem por modo
         if modo_operacao == "2 - Live + Categoria" or modo_operacao == "4 - Live + Categoria + Imagem":
             if game_name.lower() != categoria_filtro.strip().lower():
                 return None
@@ -127,24 +133,6 @@ def verificar_jogo_em_live(streamer):
 
     except Exception as e:
         print(f"Erro ao verificar live de {streamer}: {e}")
-    return None
-        game_id = stream_data[0].get('game_id')
-        if not game_id:
-            return None
-        game_response = requests.get(BASE_URL_TWITCH + f'games?id={game_id}', headers=HEADERS_TWITCH)
-        game_data = game_response.json().get("data", [])
-        if not game_data or game_data[0]['name'].lower() != categoria_filtro.strip().lower():
-            return None
-
-        m3u8_url = get_stream_m3u8_url(streamer)
-        temp_frame = f"{streamer}_frame.jpg"
-        if capturar_frame_ffmpeg_imageio(m3u8_url, temp_frame):
-            jogo = match_template_from_image(temp_frame)
-            os.remove(temp_frame)
-            return jogo, game_data[0]['name'] if game_data else "Desconhecida"
-    except Exception as e:
-        print(f"Erro ao verificar live de {streamer}: {e}")
-    return None
     return None
 
 def buscar_vods_twitch_por_periodo(data_inicio, data_fim):
