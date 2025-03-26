@@ -111,25 +111,19 @@ def buscar_vods_twitch_por_periodo(data_inicio, data_fim):
             if not user_data:
                 continue
             user_id = user_data[0]['id']
-            vod_response = requests.get(BASE_URL_TWITCH + f'videos?user_id={user_id}&type=archive&first=10', headers=HEADERS_TWITCH)
+            vod_response = requests.get(BASE_URL_TWITCH + f'videos?user_id={user_id}&type=archive&first=20', headers=HEADERS_TWITCH)
             vods = vod_response.json().get('data', [])
             for vod in vods:
                 created_at = datetime.strptime(vod['created_at'], "%Y-%m-%dT%H:%M:%SZ")
                 if not (data_inicio <= created_at <= data_fim):
                     continue
-                m3u8_url = f"https://vod-secure.twitch.tv/{vod['thumbnail_url'].split('%')[0].split('/')[-1]}.m3u8"
-                temp_frame = f"vod_{vod['id']}_frame.jpg"
-                if capturar_frame_ffmpeg_imageio(m3u8_url, temp_frame):
-                    jogo = match_template_from_image(temp_frame)
-                    os.remove(temp_frame)
-                    if jogo:
-                        resultados.append({
-                            "streamer": streamer,
-                            "jogo_detectado": jogo,
-                            "timestamp": created_at.strftime("%Y-%m-%d %H:%M:%S"),
-                            "fonte": "Twitch VOD",
-                            "url": vod['url']
-                        })
+                resultados.append({
+                    "streamer": streamer,
+                    "jogo_detectado": "-",
+                    "timestamp": created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                    "fonte": "Twitch VOD",
+                    "url": vod['url']
+                })
         except Exception as e:
             print(f"Erro ao buscar VODs: {e}")
     return resultados
