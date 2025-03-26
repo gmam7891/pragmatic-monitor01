@@ -43,14 +43,12 @@ def match_template_from_image(image_path):
     try:
         img = cv2.imread(image_path)
         img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        for template_name in os.listdir(TEMPLATES_DIR):
-            template_path = os.path.join(TEMPLATES_DIR, template_name)
-            template = cv2.imread(template_path, 0)
-            if template is None:
-                continue
+        template_path = os.path.join(TEMPLATES_DIR, "pragmaticplay.png")
+        template = cv2.imread(template_path, 0)
+        if template is not None:
             res = cv2.matchTemplate(img_gray, template, cv2.TM_CCOEFF_NORMED)
             if np.any(res >= 0.8):
-                return template_name.split('.')[0]
+                return "pragmaticplay"
     except Exception as e:
         print(f"Erro no template matching: {e}")
     return None
@@ -163,7 +161,7 @@ def buscar_vods_twitch_por_periodo(data_inicio, data_fim):
 # INTERFACE STREAMLIT
 # ------------------------------
 st.set_page_config(page_title="Monitor Cassino PP - Detecção", layout="wide")
-st.title("🌀 Monitor de Jogos Pragmatic Play")
+st.title("🌀 Monitor de Jogos - Detecção por Imagem")
 
 st.sidebar.subheader("🎯 Filtros")
 streamers_input = st.sidebar.text_input("Streamers (separados por vírgula)")
