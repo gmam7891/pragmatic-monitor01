@@ -94,12 +94,34 @@ def varrer_url_customizada(url):
     return resultados
 
 def verificar_jogo_em_live(streamer):
-    m3u8_url = get_stream_m3u8_url(streamer)
-    temp_frame = f"{streamer}_frame.jpg"
-    if capturar_frame_ffmpeg_imageio(m3u8_url, temp_frame):
-        jogo = match_template_from_image(temp_frame)
-        os.remove(temp_frame)
-        return jogo
+    try:
+        # Verifica categoria antes da detecção por imagem
+        user_response = requests.get(BASE_URL_TWITCH + f'users?login={streamer}', headers=HEADERS_TWITCH)
+        user_data = user_response.json().get('data', [])
+        if not user_data:
+            return None
+        user_id = user_data[0]['id']
+        stream_response = requests.get(BASE_URL_TWITCH + f'streams?user_id={user_id}', headers=HEADERS_TWITCH)
+        stream_data = stream_response.json().get('data', [])
+        if not stream_data:
+            return None
+        game_id = stream_data[0].get('game_id')
+        if not game_id:
+            return None
+        game_response = requests.get(BASE_URL_TWITCH + f'games?id={game_id}', headers=HEADERS_TWITCH)
+        game_data = game_response.json().get("data", [])
+        if not game_data or game_data[0]['name'].lower() != categoria_filtro.strip().lower():
+            return None
+
+        m3u8_url = get_stream_m3u8_url(streamer)
+        temp_frame = f"{streamer}_frame.jpg"
+        if capturar_frame_ffmpeg_imageio(m3u8_url, temp_frame):
+            jogo = match_template_from_image(temp_frame)
+            os.remove(temp_frame)
+            return jogo, game_data[0]['name'] if game_data else "Desconhecida"
+    except Exception as e:
+        print(f"Erro ao verificar live de {streamer}: {e}")
+    return None
     return None
 
 def buscar_vods_twitch_por_periodo(data_inicio, data_fim):
@@ -112,7 +134,18 @@ def buscar_vods_twitch_por_periodo(data_inicio, data_fim):
                 continue
             user_id = user_data[0]['id']
             vod_response = requests.get(BASE_URL_TWITCH + f'videos?user_id={user_id}&type=archive&first=20', headers=HEADERS_TWITCH)
-            vods = vod_response.json().get('data', [])
+            
+            for vod in vods:
+                created_at = datetime.strptime(vod['created_at'], "%Y-%m-%dT%H:%M:%SZ")
+                if not (data_inicio <= created_at <= data_fim):
+                    continue
+                # Verifica se a categoria é Cassino Virtual
+                game_id = vod.get("game_id")
+                if game_id:
+                    game_response = requests.get(BASE_URL_TWITCH + f'games?id={game_id}', headers=HEADERS_TWITCH)
+                    game_data = game_response.json().get("data", [])
+                    if game_data and game_data[0]['name'].lower() != categoria_filtro.strip().lower():
+                        continue
             for vod in vods:
                 created_at = datetime.strptime(vod['created_at'], "%Y-%m-%dT%H:%M:%SZ")
                 if not (data_inicio <= created_at <= data_fim):
@@ -122,6 +155,7 @@ def buscar_vods_twitch_por_periodo(data_inicio, data_fim):
                     "jogo_detectado": "-",
                     "timestamp": created_at.strftime("%Y-%m-%d %H:%M:%S"),
                     "fonte": "Twitch VOD",
+                    "categoria": game_data[0]['name'] if game_data else "Desconhecida",
                     "url": vod['url']
                 })
         except Exception as e:
@@ -135,6 +169,7 @@ st.set_page_config(page_title="Monitor Cassino PP - Detecção", layout="wide")
 st.title("🎰 Monitor de Jogos - Detecção por Imagem")
 
 st.sidebar.subheader("🎯 Filtros")
+categoria_filtro = st.sidebar.text_input("Categoria (ex: Virtual Casino)", value="Virtual Casino")
 streamers_input = st.sidebar.text_input("Streamers (separados por vírgula)")
 data_inicio = st.sidebar.date_input("Data de início", value=datetime.today() - timedelta(days=7))
 data_fim = st.sidebar.date_input("Data de fim", value=datetime.today())
@@ -147,13 +182,16 @@ with col1:
     if st.button("🔍 Verificar lives agora"):
         resultados = []
         for streamer in STREAMERS_INTERESSE:
-            jogo = verificar_jogo_em_live(streamer)
+            resultado_live = verificar_jogo_em_live(streamer)
+            if resultado_live:
+                jogo, categoria = resultado_live
             if jogo:
                 resultados.append({
                     "streamer": streamer,
                     "jogo_detectado": jogo,
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "fonte": "Live"
+                    "fonte": "Live",
+                    "categoria": categoria
                 })
         st.session_state['dados_lives'] = resultados
 
