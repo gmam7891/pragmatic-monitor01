@@ -271,8 +271,8 @@ st.markdown(
 )
 st.markdown(
     """
-    <div style='background-color:black; padding:10px; display:flex; align-items:center;'>
-        <img src='https://upload.wikimedia.org/wikipedia/commons/5/53/Pragmatic_Play_logo.svg' style='height:60px; margin-right:20px;'>
+    <div style='background-color:white; padding:10px; display:flex; align-items:center;'>
+        <img src='https://findfaircasinos.com/gfx/uploads/620_620_kr/716_Pragmatic%20play%20logo.png' style='height:60px; margin-right:20px;'>
         <h1 style='color:black; margin:0;'>Monitor Cassino Pragmatic Play</h1>
     </div>
     """,
