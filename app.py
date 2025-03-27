@@ -8,7 +8,7 @@ import numpy as np
 from PIL import Image
 import subprocess
 
-st.set_page_config(page_title="Monitor Cassino PP - Detecção", layout="wide")
+
 
 # ------------------------------
 # CONFIGURAÇÕES INICIAIS
