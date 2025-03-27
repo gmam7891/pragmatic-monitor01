@@ -204,7 +204,8 @@ url_custom = st.sidebar.text_input("URL .m3u8 personalizada")
 
 streamers_filtrados = [s.strip().lower() for s in streamers_input.split(",") if s.strip()] if streamers_input else []
 
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
+
 with col1:
     if st.button("🔍 Verificar lives agora"):
         resultados = []
@@ -235,8 +236,8 @@ with col3:
         if resultado_url:
             st.session_state['dados_url'] = resultado_url
 
-with st.sidebar:
-    if st.button("🔎 Varrer VODs com detecção de imagem"):
+with col4:
+    if st.button("🖼️ Varrer VODs com detecção de imagem"):
         dt_inicio = datetime.combine(data_inicio, datetime.min.time())
         dt_fim = datetime.combine(data_fim, datetime.max.time())
         st.session_state['dados_vods_template'] = varrer_vods_com_template(dt_inicio, dt_fim)
