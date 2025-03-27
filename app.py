@@ -200,6 +200,24 @@ def varrer_vods_com_template(data_inicio, data_fim):
 # INTERFACE STREAMLIT
 # ------------------------------
 st.set_page_config(page_title="Monitor Cassino PP - Detecção", layout="wide")
+
+st.markdown(
+    """
+    <style>
+        body {
+            background-color: black;
+            color: white;
+        }
+        .stApp {
+            background-color: black;
+        }
+        .css-18e3th9, .css-1d391kg {  /* Corrige áreas de fundo branco no layout Streamlit */
+            background-color: black !important;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 st.markdown(
     """
     <div style='background-color:black; padding:10px; display:flex; align-items:center;'>
