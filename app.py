@@ -40,14 +40,8 @@ def match_template_from_image(image_path, template_path="templates/pragmaticplay
         template = cv2.imread(template_path, 0)
         if template is not None:
             res = cv2.matchTemplate(img_gray, template, cv2.TM_CCOEFF_NORMED)
-            min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
-            print(f"Similaridade máxima: {max_val:.3f}")
-            if max_val >= 0.7:
+            if np.any(res >= 0.7):
                 return "pragmaticplay"
-            else:
-                print("Logo não encontrado no frame. Similaridade abaixo do limiar.")
-        else:
-            print("Template não foi carregado corretamente.")
     except Exception as e:
         print(f"Erro no template matching: {e}")
     return None
@@ -55,14 +49,13 @@ def match_template_from_image(image_path, template_path="templates/pragmaticplay
 def get_stream_m3u8_url(user_login):
     return f"https://usher.ttvnw.net/api/channel/hls/{user_login}.m3u8"
 
-def capturar_frame_ffmpeg_imageio(m3u8_url, output_path="frame.jpg", skip_seconds=10):
+def capturar_frame_ffmpeg_imageio(m3u8_url, output_path="frame.jpg"):
     try:
         width, height = 1280, 720
         cmd = [
-        "ffmpeg",
-        "-y",
-        "-ss", str(skip_seconds),
-        "-i", m3u8_url,
+            "ffmpeg",
+            "-y",
+            "-i", m3u8_url,
             "-vf", f"scale={width}:{height}",
             "-vframes", "1",
             "-q:v", "2",
@@ -76,28 +69,18 @@ def capturar_frame_ffmpeg_imageio(m3u8_url, output_path="frame.jpg", skip_second
 
 def varrer_url_customizada(url):
     resultados = []
-    skip_seconds = 0
-    frame_rate = 24  # 24 fps
-    duracao_analise = 24 * 60 * 60  # 24 horas (varredura completa estimada)
-    intervalo_frames = 1  # capturar 1 frame por segundo
-    total_frames = duracao_analise // intervalo_frames
-
-    for i in range(int(total_frames)):
-        skip = i * intervalo_frames
+    for i in range(5):
         frame_path = f"custom_frame_{i}.jpg"
-        print(f"Capturando frame no segundo {skip}...")
-        if capturar_frame_ffmpeg_imageio(url, frame_path, skip_seconds=skip):
+        if capturar_frame_ffmpeg_imageio(url, frame_path):
             jogo = match_template_from_image(frame_path)
+            os.remove(frame_path)
             if jogo:
                 resultados.append({
                     "jogo_detectado": jogo,
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "fonte": f"URL personalizada (segundo {skip})"
+                    "fonte": "URL personalizada"
                 })
-                st.image(frame_path, caption=f"Frame detectado no segundo {skip}", use_column_width=True)
                 break
-            else:
-                os.remove(frame_path)
     return resultados
 
 def verificar_jogo_em_live(streamer):
@@ -241,7 +224,6 @@ with col3:
         resultado_url = varrer_url_customizada(url_custom)
         if resultado_url:
             st.session_state['dados_url'] = resultado_url
-            st.image("custom_frame_0.jpg", caption="Frame analisado", use_column_width=True)
 
 with col4:
     if st.button("🖼️ Varrer VODs com detecção de imagem"):
