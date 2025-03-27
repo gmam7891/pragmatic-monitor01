@@ -55,13 +55,14 @@ def match_template_from_image(image_path, template_path="templates/pragmaticplay
 def get_stream_m3u8_url(user_login):
     return f"https://usher.ttvnw.net/api/channel/hls/{user_login}.m3u8"
 
-def capturar_frame_ffmpeg_imageio(m3u8_url, output_path="frame.jpg"):
+def capturar_frame_ffmpeg_imageio(m3u8_url, output_path="frame.jpg", skip_seconds=10):
     try:
         width, height = 1280, 720
         cmd = [
-            "ffmpeg",
-            "-y",
-            "-i", m3u8_url,
+        "ffmpeg",
+        "-y",
+        "-ss", str(skip_seconds),
+        "-i", m3u8_url,
             "-vf", f"scale={width}:{height}",
             "-vframes", "1",
             "-q:v", "2",
@@ -77,7 +78,7 @@ def varrer_url_customizada(url):
     resultados = []
     for i in range(5):
         frame_path = f"custom_frame_{i}.jpg"
-        if capturar_frame_ffmpeg_imageio(url, frame_path):
+        if capturar_frame_ffmpeg_imageio(url, frame_path, skip_seconds=10):
             jogo = match_template_from_image(frame_path)
             os.remove(frame_path)
             if jogo:
