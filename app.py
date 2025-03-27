@@ -279,7 +279,7 @@ if 'dados_lives' in st.session_state:
     df = pd.DataFrame(st.session_state['dados_lives'])
     if streamers_filtrados and 'streamer' in df.columns:
         df = df[df['streamer'].str.lower().isin(streamers_filtrados)]
-    st.subheader("📱 Detecções em Lives")
+    st.markdown("<h3 style='color:#F68B2A;'>Detecções em Lives</h3>", unsafe_allow_html=True)
     for col in ['categoria']:
         if col in df.columns:
             df[col] = df[col].apply(lambda x: f"🎯 {x}")
@@ -289,17 +289,17 @@ if 'dados_vods' in st.session_state:
     df = pd.DataFrame(st.session_state['dados_vods'])
     if streamers_filtrados and 'streamer' in df.columns:
         df = df[df['streamer'].str.lower().isin(streamers_filtrados)]
-    st.subheader("📌 Detecções em VODs")
+    st.markdown("<h3 style='color:#F68B2A;'>Detecções em VODs</h3>", unsafe_allow_html=True)
     st.dataframe(df, use_container_width=True)
 
 if 'dados_vods_template' in st.session_state:
     df = pd.DataFrame(st.session_state['dados_vods_template'])
-    st.subheader("🧐 Detecções por imagem nas VODs")
+    st.markdown("<h3 style='color:#F68B2A;'>Detecções por imagem nas VODs</h3>", unsafe_allow_html=True)
     st.dataframe(df, use_container_width=True)
 
 if 'dados_url' in st.session_state:
     df = pd.DataFrame(st.session_state['dados_url'])
-    st.subheader("🌐 Detecção em URL personalizada")
+    st.markdown("<h3 style='color:#F68B2A;'>Detecção em URL personalizada</h3>", unsafe_allow_html=True)
     st.dataframe(df, use_container_width=True)
 
 if not any(k in st.session_state for k in ['dados_lives', 'dados_vods', 'dados_url', 'dados_vods_template']):
