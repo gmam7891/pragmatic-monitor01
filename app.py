@@ -402,12 +402,12 @@ if not any(k in st.session_state for k in ['dados_lives', 'dados_vods', 'dados_u
     st.info("Nenhuma detecção encontrada.")
 
 # Treinamento do modelo pelo Streamlit
-st.markdown("<h3 style='color:#F68B2A;'>🧠 Treinar Modelo de Machine Learning</h3>", unsafe_allow_html=True)
+
 
 
 # Sugestão de novos streamers
-st.markdown("<h3 style='color:#F68B2A;'>Sugestão de Novos Streamers</h3>", unsafe_allow_html=True)
-if st.button("🔎 Buscar novos streamers que jogam Slots"):
+
+if st.sidebar.button("🔎 Buscar novos streamers que jogam Slots"):
     novos = sugerir_novos_streamers()
     if novos:
         st.success(f"Encontrados {len(novos)} novos possíveis streamers:")
