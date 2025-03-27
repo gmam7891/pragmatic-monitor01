@@ -256,14 +256,14 @@ st.markdown(
     """
     <style>
         body {
-            background-color: black;
-            color: white;
+            background-color: white;
+            color: black;
         }
         .stApp {
-            background-color: black;
+            background-color: white;
         }
-        .css-18e3th9, .css-1d391kg {  /* Corrige áreas de fundo branco no layout Streamlit */
-            background-color: black !important;
+        .css-18e3th9, .css-1d391kg {
+            background-color: white !important;
         }
     </style>
     """,
@@ -272,8 +272,8 @@ st.markdown(
 st.markdown(
     """
     <div style='background-color:black; padding:10px; display:flex; align-items:center;'>
-        <img src='https://images.seeklogo.com/logo-png/43/1/pragmatic-play-logo-png_seeklogo-433521.png' style='height:60px; margin-right:20px;'>
-        <h1 style='color:white; margin:0;'>Monitor Cassino Pragmatic Play</h1>
+        <img src='https://upload.wikimedia.org/wikipedia/commons/5/53/Pragmatic_Play_logo.svg' style='height:60px; margin-right:20px;'>
+        <h1 style='color:black; margin:0;'>Monitor Cassino Pragmatic Play</h1>
     </div>
     """,
     unsafe_allow_html=True
