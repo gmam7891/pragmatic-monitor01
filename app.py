@@ -200,7 +200,15 @@ def varrer_vods_com_template(data_inicio, data_fim):
 # INTERFACE STREAMLIT
 # ------------------------------
 st.set_page_config(page_title="Monitor Cassino PP - Detecção", layout="wide")
-st.title("🌀 Monitor Cassino Pragmatic Play")
+st.markdown(
+    """
+    <div style='background-color:black; padding:10px; display:flex; align-items:center;'>
+        <img src='https://www.pragmaticplay.com/wp-content/themes/gp-theme-basic/libs/dist/images/PP-white-logo.svg' style='height:60px; margin-right:20px;'>
+        <h1 style='color:white; margin:0;'>Monitor Cassino Pragmatic Play</h1>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 st.sidebar.subheader("🎯 Filtros")
 streamers_input = st.sidebar.text_input("Streamers (separados por vírgula)")
