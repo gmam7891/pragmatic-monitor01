@@ -40,8 +40,14 @@ def match_template_from_image(image_path, template_path="templates/pragmaticplay
         template = cv2.imread(template_path, 0)
         if template is not None:
             res = cv2.matchTemplate(img_gray, template, cv2.TM_CCOEFF_NORMED)
-            if np.any(res >= 0.7):
+            min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+            print(f"Similaridade máxima: {max_val:.3f}")
+            if max_val >= 0.7:
                 return "pragmaticplay"
+            else:
+                print("Logo não encontrado no frame. Similaridade abaixo do limiar.")
+        else:
+            print("Template não foi carregado corretamente.")
     except Exception as e:
         print(f"Erro no template matching: {e}")
     return None
