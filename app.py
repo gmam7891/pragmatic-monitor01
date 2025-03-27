@@ -87,7 +87,7 @@ def varrer_url_customizada(url):
         frame_path = f"custom_frame_{i}.jpg"
         print(f"Capturando frame no segundo {skip}...")
         if capturar_frame_ffmpeg_imageio(url, frame_path, skip_seconds=skip):
-            jogo = match_template_from_image(frame_path)
+            jogo = prever_jogo_em_frame(frame_path)
             if jogo:
                 resultados.append({
                     "jogo_detectado": jogo,
@@ -197,7 +197,55 @@ def varrer_vods_com_template(data_inicio, data_fim):
     return resultados
 
 # ------------------------------
-# INTERFACE STREAMLIT
+# MACHINE LEARNING E SUGESTÃO DE NOVOS STREAMERS
+# ------------------------------
+
+def sugerir_novos_streamers(game_name="Slots"):
+    sugestoes = []
+    try:
+        response = requests.get(BASE_URL_TWITCH + f'streams?game_name={game_name}&first=50', headers=HEADERS_TWITCH)
+        data = response.json().get("data", [])
+        atuais = set(STREAMERS_INTERESSE)
+        for stream in data:
+            login = stream.get("user_login")
+            if login and login not in atuais:
+                sugestoes.append(login)
+    except Exception as e:
+        print(f"Erro ao buscar novos streamers: {e}")
+    return sugestoes
+
+# ------------------------------
+# MODELO DE MACHINE LEARNING (CNN SIMPLES)
+# ------------------------------
+import tensorflow as tf
+from tensorflow.keras.models import load_model
+from tensorflow.keras.preprocessing import image
+
+MODEL_PATH = "modelo_pragmatic.keras"
+
+@st.cache_resource
+def carregar_modelo():
+    if os.path.exists(MODEL_PATH):
+        return load_model(MODEL_PATH)
+    else:
+        st.warning("Modelo de ML ainda não treinado. Usando detecção por template.")
+        return None
+
+modelo_ml = carregar_modelo()
+
+def prever_jogo_em_frame(frame_path):
+    if modelo_ml is None:
+        return match_template_from_image(frame_path)  # fallback
+    try:
+        img = image.load_img(frame_path, target_size=(224, 224))
+        x = image.img_to_array(img)
+        x = np.expand_dims(x, axis=0) / 255.0
+        pred = modelo_ml.predict(x)[0][0]
+        print(f"Probabilidade modelo ML: {pred:.3f}")
+        return "pragmaticplay" if pred >= 0.5 else None
+    except Exception as e:
+        print(f"Erro ao prever com modelo ML: {e}")
+        return None
 # ------------------------------
 st.set_page_config(page_title="Monitor Cassino PP - Detecção", layout="wide")
 
@@ -303,4 +351,63 @@ if 'dados_url' in st.session_state:
     st.dataframe(df, use_container_width=True)
 
 if not any(k in st.session_state for k in ['dados_lives', 'dados_vods', 'dados_url', 'dados_vods_template']):
+    st.info("Nenhuma detecção encontrada.")
+
+# Treinamento do modelo pelo Streamlit
+st.markdown("<h3 style='color:#F68B2A;'>🧠 Treinar Modelo de Machine Learning</h3>", unsafe_allow_html=True)
+if st.button("🚀 Treinar modelo agora"):
+    from tensorflow.keras.preprocessing.image import ImageDataGenerator
+    from tensorflow.keras import layers, models
+
+    st.write("Iniciando treinamento...")
+
+    dataset_dir = "dataset"
+    img_height, img_width = 224, 224
+    batch_size = 32
+
+    datagen = ImageDataGenerator(rescale=1./255, validation_split=0.2)
+
+    train_gen = datagen.flow_from_directory(
+        dataset_dir,
+        target_size=(img_height, img_width),
+        batch_size=batch_size,
+        class_mode='binary',
+        subset='training'
+    )
+
+    val_gen = datagen.flow_from_directory(
+        dataset_dir,
+        target_size=(img_height, img_width),
+        batch_size=batch_size,
+        class_mode='binary',
+        subset='validation'
+    )
+
+    model = models.Sequential([
+        layers.Conv2D(32, (3, 3), activation='relu', input_shape=(img_height, img_width, 3)),
+        layers.MaxPooling2D(2, 2),
+        layers.Conv2D(64, (3, 3), activation='relu'),
+        layers.MaxPooling2D(2, 2),
+        layers.Flatten(),
+        layers.Dense(64, activation='relu'),
+        layers.Dense(1, activation='sigmoid')
+    ])
+
+    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+
+    model.fit(train_gen, validation_data=val_gen, epochs=5)
+
+    model.save(MODEL_PATH)
+    st.success("✅ Modelo treinado e salvo com sucesso como 'modelo_pragmatic.keras'")
+
+# Sugestão de novos streamers
+st.markdown("<h3 style='color:#F68B2A;'>Sugestão de Novos Streamers</h3>", unsafe_allow_html=True)
+if st.button("🔎 Buscar novos streamers que jogam Slots"):
+    novos = sugerir_novos_streamers()
+    if novos:
+        st.success(f"Encontrados {len(novos)} novos possíveis streamers:")
+        for nome in novos:
+            st.write(f"- {nome}")
+    else:
+        st.warning("Nenhum novo streamer encontrado no momento."):
     st.info("Nenhuma detecção encontrada.")
