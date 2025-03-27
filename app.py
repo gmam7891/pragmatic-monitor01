@@ -224,14 +224,15 @@ import tensorflow as tf
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing import image
 
-MODEL_PATH = "modelo_pragmatic.keras"
+MODEL_DIR = "modelo"
+MODEL_PATH = os.path.join(MODEL_DIR, "modelo_pragmatic.keras")
 
 @st.cache_resource
 def carregar_modelo():
     if os.path.exists(MODEL_PATH):
         return load_model(MODEL_PATH)
     else:
-        st.warning("Modelo de ML ainda não treinado. Usando detecção por template.")
+        st.warning("Modelo de ML ainda não treinado. Usando detecção por template.", icon="⚠️")
         return None
 
 modelo_ml = carregar_modelo()
@@ -327,8 +328,14 @@ if st.sidebar.button("🚀 Treinar modelo agora"):
 
     model.fit(train_gen, validation_data=val_gen, epochs=5)
 
+    if not os.path.exists(MODEL_DIR):
+        os.makedirs(MODEL_DIR)
     model.save(MODEL_PATH)
-    st.sidebar.success("✅ Modelo treinado e salvo com sucesso como 'modelo_pragmatic.keras'")
+    if os.path.exists(MODEL_PATH):
+        st.sidebar.success("✅ Modelo treinado e salvo com sucesso como 'modelo_pragmatic.keras'")
+        st.sidebar.write(f"📁 Caminho: {MODEL_PATH}")
+    else:
+        st.sidebar.error("❌ Modelo NÃO foi salvo! Verifique permissões ou erros no ambiente.")
 
 streamers_filtrados = [s.strip().lower() for s in streamers_input.split(",") if s.strip()] if streamers_input else []
 
