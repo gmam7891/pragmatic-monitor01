@@ -230,6 +230,7 @@ with col3:
         resultado_url = varrer_url_customizada(url_custom)
         if resultado_url:
             st.session_state['dados_url'] = resultado_url
+            st.image("custom_frame_0.jpg", caption="Frame analisado", use_column_width=True)
 
 with col4:
     if st.button("🖼️ Varrer VODs com detecção de imagem"):
