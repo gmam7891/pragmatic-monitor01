@@ -76,13 +76,14 @@ def capturar_frame_ffmpeg_imageio(m3u8_url, output_path="frame.jpg", skip_second
 
 def varrer_url_customizada(url):
     resultados = []
-    intervalo_segundos = 60  # tempo entre capturas
-    limite_maximo = 4 * 60 * 60  # 4 horas (em segundos)
-    i = 0
-    while True:
-        skip = i * intervalo_segundos
-        if skip >= limite_maximo:
-            break
+    skip_seconds = 0
+    frame_rate = 24  # 24 fps
+    duracao_analise = 24 * 60 * 60  # 24 horas (varredura completa estimada)
+    intervalo_frames = 1  # capturar 1 frame por segundo
+    total_frames = duracao_analise // intervalo_frames
+
+    for i in range(int(total_frames)):
+        skip = i * intervalo_frames
         frame_path = f"custom_frame_{i}.jpg"
         print(f"Capturando frame no segundo {skip}...")
         if capturar_frame_ffmpeg_imageio(url, frame_path, skip_seconds=skip):
@@ -94,10 +95,9 @@ def varrer_url_customizada(url):
                     "fonte": f"URL personalizada (segundo {skip})"
                 })
                 st.image(frame_path, caption=f"Frame detectado no segundo {skip}", use_column_width=True)
-                break  # interrompe ao encontrar
+                break
             else:
                 os.remove(frame_path)
-        i += 1
     return resultados
 
 def verificar_jogo_em_live(streamer):
