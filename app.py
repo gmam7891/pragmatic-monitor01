@@ -454,5 +454,4 @@ if st.button("🔎 Buscar novos streamers que jogam Slots"):
         for nome in novos:
             st.write(f"- {nome}")
     else:
-        st.warning("Nenhum novo streamer encontrado no momento."):
-    st.info("Nenhuma detecção encontrada.")
+    st.warning("Nenhum novo streamer encontrado no momento.")
