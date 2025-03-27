@@ -419,7 +419,7 @@ if not any(k in st.session_state for k in ['dados_lives', 'dados_vods', 'dados_u
 
 # Sugestão de novos streamers
 
-if st.sidebar.button("🔎 Buscar novos streamers que jogam Slots"):
+if st.sidebar.button("🔎 Buscar novos streamers"):
     novos = sugerir_novos_streamers()
     if novos:
         st.success(f"Encontrados {len(novos)} novos possíveis streamers:")
