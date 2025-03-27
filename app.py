@@ -403,50 +403,7 @@ if not any(k in st.session_state for k in ['dados_lives', 'dados_vods', 'dados_u
 
 # Treinamento do modelo pelo Streamlit
 st.markdown("<h3 style='color:#F68B2A;'>🧠 Treinar Modelo de Machine Learning</h3>", unsafe_allow_html=True)
-if st.button("🚀 Treinar modelo agora"):
-    from tensorflow.keras.preprocessing.image import ImageDataGenerator
-    from tensorflow.keras import layers, models
 
-    st.write("Iniciando treinamento...")
-
-    dataset_dir = "dataset"
-    img_height, img_width = 224, 224
-    batch_size = 32
-
-    datagen = ImageDataGenerator(rescale=1./255, validation_split=0.2)
-
-    train_gen = datagen.flow_from_directory(
-        dataset_dir,
-        target_size=(img_height, img_width),
-        batch_size=batch_size,
-        class_mode='binary',
-        subset='training'
-    )
-
-    val_gen = datagen.flow_from_directory(
-        dataset_dir,
-        target_size=(img_height, img_width),
-        batch_size=batch_size,
-        class_mode='binary',
-        subset='validation'
-    )
-
-    model = models.Sequential([
-        layers.Conv2D(32, (3, 3), activation='relu', input_shape=(img_height, img_width, 3)),
-        layers.MaxPooling2D(2, 2),
-        layers.Conv2D(64, (3, 3), activation='relu'),
-        layers.MaxPooling2D(2, 2),
-        layers.Flatten(),
-        layers.Dense(64, activation='relu'),
-        layers.Dense(1, activation='sigmoid')
-    ])
-
-    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
-
-    model.fit(train_gen, validation_data=val_gen, epochs=5)
-
-    model.save(MODEL_PATH)
-    st.success("✅ Modelo treinado e salvo com sucesso como 'modelo_pragmatic.keras'")
 
 # Sugestão de novos streamers
 st.markdown("<h3 style='color:#F68B2A;'>Sugestão de Novos Streamers</h3>", unsafe_allow_html=True)
