@@ -235,16 +235,20 @@ def carregar_modelo():
         st.warning("Modelo de ML ainda não treinado. Usando detecção por template.", icon="⚠️")
         return None
 
-modelo_ml = carregar_modelo()
+# modelo_ml será carregado dinamicamente com session_state
+
+if "modelo_ml" not in st.session_state and os.path.exists(MODEL_PATH):
+    st.session_state["modelo_ml"] = load_model(MODEL_PATH)
 
 def prever_jogo_em_frame(frame_path):
-    if modelo_ml is None:
+    modelo = st.session_state.get("modelo_ml", None)
+    if modelo is None:
         return match_template_from_image(frame_path)  # fallback
     try:
         img = image.load_img(frame_path, target_size=(224, 224))
         x = image.img_to_array(img)
         x = np.expand_dims(x, axis=0) / 255.0
-        pred = modelo_ml.predict(x)[0][0]
+        pred = modelo.predict(x)[0][0]
         print(f"Probabilidade modelo ML: {pred:.3f}")
         return "pragmaticplay" if pred >= 0.5 else None
     except Exception as e:
