@@ -272,7 +272,7 @@ st.markdown(
 st.markdown(
     """
     <div style='background-color:black; padding:10px; display:flex; align-items:center;'>
-        <img src='https://www.pragmaticplay.com/wp-content/themes/gp-theme-basic/libs/dist/images/PP-white-logo.svg' style='height:60px; margin-right:20px;'>
+        <img src='https://images.seeklogo.com/logo-png/43/1/pragmatic-play-logo-png_seeklogo-433521.png' style='height:60px; margin-right:20px;'>
         <h1 style='color:white; margin:0;'>Monitor Cassino Pragmatic Play</h1>
     </div>
     """,
