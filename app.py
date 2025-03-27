@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 import requests
 import streamlit as st
+st.set_page_config(page_title="Monitor Cassino PP - Detecção", layout="wide")
 import pandas as pd
 import os
 import cv2
@@ -249,7 +250,7 @@ def prever_jogo_em_frame(frame_path):
         print(f"Erro ao prever com modelo ML: {e}")
         return None
 # ------------------------------
-st.set_page_config(page_title="Monitor Cassino PP - Detecção", layout="wide")
+# ⚠️ REMOVIDO para resolver erro: set_page_config deve ser o primeiro comando Streamlit
 
 st.markdown(
     """
