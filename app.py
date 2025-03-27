@@ -334,7 +334,7 @@ if st.sidebar.button("🚀 Treinar modelo agora"):
     if os.path.exists(MODEL_PATH):
         st.sidebar.success("✅ Modelo treinado e salvo com sucesso como 'modelo_pragmatic.keras'")
         st.sidebar.write(f"📁 Caminho: {MODEL_PATH}")
-        st.experimental_rerun()
+        st.rerun()
     else:
         st.sidebar.error("❌ Modelo NÃO foi salvo! Verifique permissões ou erros no ambiente.")
 
