@@ -103,6 +103,92 @@ def verificar_clip_twitch(clip_url):
         print(f"Erro no clip: {e}")
     return None
 
+# ------------------------------
+# Filtros, datas e campo de URL
+# ------------------------------
+
+st.sidebar.subheader("🎯 Filtros")
+streamers_input = st.sidebar.text_input("Streamers (separados por vírgula)")
+data_inicio = st.sidebar.date_input("Data de início", value=datetime.today() - timedelta(days=7))
+data_fim = st.sidebar.date_input("Data de fim", value=datetime.today())
+url_custom = st.sidebar.text_input("URL .m3u8 personalizada")
+
+# Treinar modelo
+if st.sidebar.button("🚀 Treinar modelo agora"):
+    from tensorflow.keras.preprocessing.image import ImageDataGenerator
+    from tensorflow.keras import layers, models
+
+    st.sidebar.write("Iniciando treinamento...")
+
+    dataset_dir = "dataset"
+    img_height, img_width = 224, 224
+    batch_size = 32
+
+    datagen = ImageDataGenerator(rescale=1./255, validation_split=0.2)
+
+    train_gen = datagen.flow_from_directory(
+        dataset_dir,
+        target_size=(img_height, img_width),
+        batch_size=batch_size,
+        class_mode='binary',
+        subset='training'
+    )
+
+    val_gen = datagen.flow_from_directory(
+        dataset_dir,
+        target_size=(img_height, img_width),
+        batch_size=batch_size,
+        class_mode='binary',
+        subset='validation'
+    )
+
+    model = models.Sequential([
+        layers.Conv2D(32, (3, 3), activation='relu', input_shape=(img_height, img_width, 3)),
+        layers.MaxPooling2D(2, 2),
+        layers.Conv2D(64, (3, 3), activation='relu'),
+        layers.MaxPooling2D(2, 2),
+        layers.Flatten(),
+        layers.Dense(64, activation='relu'),
+        layers.Dense(1, activation='sigmoid')
+    ])
+
+    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+
+    model.fit(train_gen, validation_data=val_gen, epochs=5)
+
+    if not os.path.exists(MODEL_DIR):
+        os.makedirs(MODEL_DIR)
+    model.save(MODEL_PATH)
+    if os.path.exists(MODEL_PATH):
+        st.sidebar.success("✅ Modelo treinado e salvo com sucesso como 'modelo_pragmatic.keras'")
+        st.sidebar.write(f"📁 Caminho: {MODEL_PATH}")
+        st.rerun()
+    else:
+        st.sidebar.error("❌ Modelo NÃO foi salvo! Verifique permissões ou erros no ambiente.")
+
+# Sugestão de novos streamers
+if st.sidebar.button("🔎 Buscar novos streamers"):
+    def sugerir_novos_streamers(game_name="Slots"):
+        sugestoes = []
+        try:
+            response = requests.get(f"https://api.twitch.tv/helix/streams?game_name={game_name}&first=50", headers=HEADERS_TWITCH)
+            data = response.json().get("data", [])
+            for stream in data:
+                login = stream.get("user_login")
+                if login and login not in streamers_input:
+                    sugestoes.append(login)
+        except Exception as e:
+            st.error(f"Erro ao buscar novos streamers: {e}")
+        return sugestoes
+
+    novos = sugerir_novos_streamers()
+    if novos:
+        st.success(f"Encontrados {len(novos)} novos possíveis streamers:")
+        for nome in novos:
+            st.write(f"- {nome}")
+    else:
+        st.info("Nenhum novo streamer encontrado no momento.")
+
 # Interface Clip
 st.sidebar.subheader("🎬 Verificar Clip da Twitch")
 clip_url = st.sidebar.text_input("Cole o link do clip")
