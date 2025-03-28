@@ -5,29 +5,31 @@
 # 4. Suporte a múltiplos templates.
 # 5. Detecção em Clips da Twitch sem download do vídeo.
 
+import streamlit as st
+st.set_page_config(page_title="Monitor Cassino PP - Detecção", layout="wide")
+
 import os
 import cv2
 import numpy as np
 import requests
 from datetime import datetime, timedelta
-import streamlit as st
 import subprocess
 import re
 import pandas as pd
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing import image
 
+# Diretórios e constantes
 TEMPLATES_DIR = "templates"
 MODEL_DIR = "modelo"
 MODEL_PATH = os.path.join(MODEL_DIR, "modelo_pragmatic.keras")
-
 HEADERS_TWITCH = {
     'Client-ID': 'gp762nuuoqcoxypju8c569th9wz7q5',
     'Authorization': f'Bearer moila7dw5ejlk3eja6ne08arw0oexs'
 }
 
 # --------------------------
-# Utilitários e funções auxiliares
+# Utilitários
 # --------------------------
 
 def nomear_frame_temp(prefixo="frame"):
@@ -60,6 +62,10 @@ def match_template_from_image_multi(image_path, templates_dir=TEMPLATES_DIR, thr
         print(f"Erro no template matching: {e}")
     return None
 
+# --------------------------
+# Modelo de Machine Learning
+# --------------------------
+
 @st.cache_resource
 def carregar_modelo():
     if os.path.exists(MODEL_PATH):
@@ -85,7 +91,7 @@ def prever_jogo_em_frame(frame_path):
         return None
 
 # --------------------------
-# Funções principais do app
+# Funções principais
 # --------------------------
 
 def verificar_jogo_em_live(streamer):
@@ -148,15 +154,17 @@ def varrer_url_customizada(url):
             if jogo:
                 st.image(frame_path, caption=f"Frame {segundo}s", use_column_width=True)
                 os.remove(frame_path)
-                return [{"jogo_detectado": jogo, "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "fonte": f"Custom URL ({segundo}s)"}]
+                return [{
+                    "jogo_detectado": jogo,
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "fonte": f"Custom URL ({segundo}s)"
+                }]
             os.remove(frame_path)
     return []
 
 # --------------------------
-# Interface
+# Interface Streamlit
 # --------------------------
-
-st.set_page_config(page_title="Monitor Cassino PP - Detecção", layout="wide")
 
 st.title("🎰 Monitor Cassino Pragmatic Play")
 
@@ -177,7 +185,13 @@ with col1:
             res = verificar_jogo_em_live(streamer)
             if res:
                 jogo, categoria = res
-                resultados.append({"streamer": streamer, "jogo_detectado": jogo, "timestamp": datetime.now(), "fonte": "Live", "categoria": categoria})
+                resultados.append({
+                    "streamer": streamer,
+                    "jogo_detectado": jogo,
+                    "timestamp": datetime.now(),
+                    "fonte": "Live",
+                    "categoria": categoria
+                })
         if resultados:
             st.dataframe(pd.DataFrame(resultados))
 
